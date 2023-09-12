@@ -1,0 +1,15 @@
+[package]
+name = "corrosion"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "corr"
+path = "src/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+log = "0.4.20"
+phf = { version = "0.11.2", features = ["macros"] }
