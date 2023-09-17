@@ -1,6 +1,5 @@
 use crate::lex::{val::ObjectVal, Token};
 
-use self::expr::Expr;
 use thiserror::Error;
 
 pub mod expr {
@@ -61,11 +60,11 @@ pub enum AstWalkError {
 }
 
 impl AstStringify {
-    pub fn stringify(&mut self, e: &Expr) -> anyhow::Result<String> {
+    pub fn stringify(&mut self, e: &expr::Expr) -> anyhow::Result<String> {
         e.walk(self)
     }
 
-    pub fn lispify(&mut self, name: &str, exprs: &[&Expr]) -> anyhow::Result<String> {
+    pub fn lispify(&mut self, name: &str, exprs: &[&expr::Expr]) -> anyhow::Result<String> {
         let mut result = String::new();
         result.push_str(&format!("({name}"));
         for expr in exprs {
@@ -86,7 +85,7 @@ impl AstWalker<String> for AstStringify {
             } => self.lispify(&operator.lexeme, &[left.as_ref(), right.as_ref()]),
             expr::Expr::Grouping(exp) => self.lispify("group", &[&exp.as_ref()]),
             expr::Expr::Literal(lit) => match lit {
-                crate::lex::val::ObjectVal::Nil => Ok("nil".into()),
+                crate::lex::val::ObjectVal::Unit => Ok("nil".into()),
 
                 _ => Ok(lit.to_string()),
             },

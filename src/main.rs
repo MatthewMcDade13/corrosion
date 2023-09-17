@@ -7,6 +7,7 @@ mod sys;
 use ast::expr::Expr;
 use clap::{arg, command};
 
+use interp::Interpreter;
 use lex::{LexResult, Lexer, TokenType};
 use parse::Parser;
 
@@ -27,7 +28,10 @@ fn main() -> anyhow::Result<()> {
     };
 
     let expr = Parser::parse(lex_result.tokens.as_ref())?;
+    let result_str = Interpreter::eval(&expr)?;
+    println!("{}", lex_result.to_string());
     println!("{}", AstStringify.stringify(&expr)?);
+    println!("{}", result_str);
     // print_expr();
     Ok(())
 }
@@ -38,7 +42,7 @@ fn print_expr() -> anyhow::Result<()> {
         left: Box::new(Expr::Unary {
             operator: lex::Token {
                 ty: TokenType::Minus,
-                literal: ObjectVal::Nil,
+                literal: ObjectVal::Unit,
                 line: 1,
                 lexeme: "-".into(),
             },
@@ -46,7 +50,7 @@ fn print_expr() -> anyhow::Result<()> {
         }),
         operator: lex::Token {
             ty: TokenType::Star,
-            literal: ObjectVal::Nil,
+            literal: ObjectVal::Unit,
             line: 1,
             lexeme: "*".into(),
         },

@@ -48,7 +48,12 @@ impl Parser {
         let mut expr = self.term()?;
         loop {
             match self.peek().ty {
-                TokenType::Gt | TokenType::Ge | TokenType::Lt | TokenType::Le => {
+                TokenType::Gt
+                | TokenType::Ge
+                | TokenType::Lt
+                | TokenType::Le
+                | TokenType::EqualEqual
+                | TokenType::BangEqual => {
                     self.advance(1);
                     let operator = self.prev().clone();
                     let right = self.term()?;
@@ -108,9 +113,9 @@ impl Parser {
                 self.advance(1);
                 Ok(Expr::Literal(ObjectVal::Boolean(true)))
             }
-            TokenType::Nil => {
+            TokenType::Unit => {
                 self.advance(1);
-                Ok(Expr::Literal(ObjectVal::Nil))
+                Ok(Expr::Literal(ObjectVal::Unit))
             }
             TokenType::Number | TokenType::String => {
                 self.advance(1);

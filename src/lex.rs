@@ -35,8 +35,8 @@ pub enum TokenType {
     True,
     Fn,
     If,
+
     Unit,
-    Nil,
     Or,
     Return,
     Super,
@@ -67,7 +67,7 @@ pub mod val {
         Number(f64),
         String(String),
         Boolean(bool),
-        Nil,
+        Unit,
         // use an Rc for object so we can keep ObjectVal as small as possible
         // OR we can have the language ast::Object wrap a Box/Rc, which is probably more
         // preferrable
@@ -128,7 +128,7 @@ pub mod val {
                 ObjectVal::Number(_) => "Number".into(),
                 ObjectVal::String(_) => "String".into(),
                 ObjectVal::Boolean(_) => "Boolean".into(),
-                ObjectVal::Nil => "Nil".into(),
+                ObjectVal::Unit => "Unit".into(),
             }
         }
 
@@ -147,8 +147,8 @@ pub mod val {
             }
         }
 
-        pub const fn is_nil(&self) -> bool {
-            if let Self::Nil = self {
+        pub const fn is_unit(&self) -> bool {
+            if let Self::Unit = self {
                 true
             } else {
                 false
@@ -156,9 +156,44 @@ pub mod val {
         }
     }
 
+    impl PartialEq for ObjectVal {
+        fn eq(&self, other: &Self) -> bool {
+            match self {
+                ObjectVal::Number(left) => {
+                    if let ObjectVal::Number(right) = other {
+                        left == right
+                    } else {
+                        false
+                    }
+                }
+                ObjectVal::String(left) => {
+                    if let ObjectVal::String(right) = other {
+                        left == right
+                    } else {
+                        false
+                    }
+                }
+                ObjectVal::Boolean(left) => {
+                    if let ObjectVal::Boolean(right) = other {
+                        left == right
+                    } else {
+                        false
+                    }
+                }
+                ObjectVal::Unit => {
+                    if let ObjectVal::Unit = other {
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+    }
+
     impl Default for ObjectVal {
         fn default() -> Self {
-            Self::Nil
+            Self::Unit
         }
     }
 
@@ -168,7 +203,7 @@ pub mod val {
                 ObjectVal::Number(n) => n.to_string(),
                 ObjectVal::String(s) => s.clone(),
                 ObjectVal::Boolean(b) => b.to_string(),
-                ObjectVal::Nil => String::from("nil"),
+                ObjectVal::Unit => String::from("()"),
             };
             write!(f, "{}", str)
         }
@@ -260,7 +295,7 @@ pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "true" => TokenType::True,
     "false" => TokenType::False,
     "fn" => TokenType::Fn,
-    "nil" => TokenType::Nil,
+    "nil" => TokenType::Unit,
     "and" => TokenType::And,
     "or" => TokenType::Or,
     "return" => TokenType::Return,
@@ -373,6 +408,12 @@ impl Lexer {
             let token = lex.cursor.to_token(source_str, ty, literal);
             lex.tokens.push(token);
         }
+        lex.tokens.push(Token {
+            ty: TokenType::Eof,
+            literal: val::ObjectVal::Unit,
+            line: 0,
+            lexeme: "\0".into(),
+        });
         LexResult {
             tokens: lex.tokens,
             errors: lex.errors,
@@ -522,7 +563,7 @@ impl Cursor {
     pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<val::ObjectVal>) -> Token {
         Token {
             ty,
-            literal: literal.unwrap_or(val::ObjectVal::Nil),
+            literal: literal.unwrap_or(val::ObjectVal::Unit),
             line: self.lineno,
             lexeme: match ty {
                 TokenType::String => source[self.start + 1..self.i - 1].to_string(),
