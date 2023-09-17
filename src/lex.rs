@@ -1,7 +1,9 @@
-use std::{collections::HashMap, fs::File};
+use anyhow::*;
+use std::{collections::HashMap, fs::File, path::Display};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
+    FatArrow,
     LeftBrace,
     RightBrace,
     LeftParen,
@@ -50,76 +52,204 @@ pub enum TokenType {
     Continue,
     Comment,
     Unknown,
+    Colon,
+    DoubleColon,
 }
 
-#[derive(Debug, Clone)]
-pub enum Literal {
-    Number(f64),
-    Str(String),
-    Boolean(bool),
-    Nil,
-    Unknown(String),
-}
+pub mod val {
+    use anyhow::*;
+    use std::fmt;
 
-impl Default for Literal {
-    fn default() -> Self {
-        Self::Unknown("unassigned".into())
+    use crate::ast::AstWalkError;
+
+    #[derive(Debug, Clone)]
+    pub enum ObjectVal {
+        Number(f64),
+        String(String),
+        Boolean(bool),
+        Nil,
+        // use an Rc for object so we can keep ObjectVal as small as possible
+        // OR we can have the language ast::Object wrap a Box/Rc, which is probably more
+        // preferrable
+        // Obj(Rc<ast::Object>),
+    }
+
+    impl ObjectVal {
+        pub fn as_number(&self) -> anyhow::Result<f64> {
+            let value = self.clone();
+            if let Self::Number(n) = value {
+                Ok(n)
+            } else {
+                let type_str = value.type_string();
+                bail!(
+                    "{}",
+                    AstWalkError::TypeError {
+                        value,
+                        message: format!("Expected Number, got: {}", type_str)
+                    }
+                )
+            }
+        }
+
+        pub fn as_string(&self) -> anyhow::Result<String> {
+            let value = self.clone();
+            if let Self::String(string) = value {
+                Ok(string)
+            } else {
+                let type_str = value.type_string();
+                bail!(
+                    "{}",
+                    AstWalkError::TypeError {
+                        value,
+                        message: format!("Expected String, got: {}", type_str)
+                    }
+                )
+            }
+        }
+
+        pub fn as_bool(&self) -> anyhow::Result<bool> {
+            let value = self.clone();
+            if let Self::Boolean(b) = value {
+                Ok(b)
+            } else {
+                let type_str = value.type_string();
+                bail!(
+                    "{}",
+                    AstWalkError::TypeError {
+                        value,
+                        message: format!("Expected Boolean, got: {}", type_str)
+                    }
+                )
+            }
+        }
+
+        pub fn type_string(&self) -> String {
+            match self {
+                ObjectVal::Number(_) => "Number".into(),
+                ObjectVal::String(_) => "String".into(),
+                ObjectVal::Boolean(_) => "Boolean".into(),
+                ObjectVal::Nil => "Nil".into(),
+            }
+        }
+
+        pub const fn is_str(&self) -> bool {
+            if let Self::String(_) = self {
+                true
+            } else {
+                false
+            }
+        }
+        pub const fn is_bool(&self) -> bool {
+            if let Self::Boolean(_) = self {
+                true
+            } else {
+                false
+            }
+        }
+
+        pub const fn is_nil(&self) -> bool {
+            if let Self::Nil = self {
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    impl Default for ObjectVal {
+        fn default() -> Self {
+            Self::Nil
+        }
+    }
+
+    impl fmt::Display for ObjectVal {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let str = match self {
+                ObjectVal::Number(n) => n.to_string(),
+                ObjectVal::String(s) => s.clone(),
+                ObjectVal::Boolean(b) => b.to_string(),
+                ObjectVal::Nil => String::from("nil"),
+            };
+            write!(f, "{}", str)
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    ty: TokenType,
-    literal: Literal,
-    line: u32,
-    lexeme: String,
+    pub ty: TokenType,
+    pub literal: val::ObjectVal,
+    pub line: u32,
+    pub lexeme: String,
 }
 
-impl ToString for Token {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self {
             ty,
             literal,
             lexeme,
             line,
         } = self;
-        format!("LineNo:{line} {ty:?} :: {lexeme} :: {literal:?}")
+        write!(f, "LineNo:{line} {ty:?} :: {lexeme} :: {literal:?}")
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct LexResult {
+    pub tokens: Vec<Token>,
+    pub errors: Vec<String>,
+}
+
+impl ToString for LexResult {
+    fn to_string(&self) -> String {
+        let mut string = String::new();
+        let ts = self.tokens.iter().fold(String::new(), |mut acc, curr| {
+            acc.push_str(" | ");
+            acc.push_str(&curr.to_string());
+            acc
+        });
+        let es = self.errors.iter().fold(String::new(), |mut acc, curr| {
+            acc.push_str(" | ");
+            acc.push_str(&curr);
+            acc
+        });
+
+        string.push_str("TOKENS \n");
+        string.push_str(&ts);
+        string.push_str("\n");
+        string.push_str("ERRORS \n");
+        string.push_str(&es);
+        string
+    }
+}
+
+impl LexResult {
+    pub fn empty() -> Self {
+        Self {
+            tokens: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+}
+
+impl Default for LexResult {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Lexer {
     source: Vec<u8>,
+    source_str: String,
     cursor: Cursor,
     tokens: Vec<Token>,
     errors: Vec<String>,
 }
-/*
-*
-    And,
-
-    Trait,
-    Impl,
-    Else,
-    False,
-    True,
-    Fn,
-    If,
-    Unit,
-    Nil,
-    Or,
-    Return,
-    Super,
-    ThisSelf,
-    Let,
-    Const,
-    Eof,
-    Loop,
-    For,
-    While,
-    Break,
-    Switch,
-* */
 use phf::phf_map;
+
+use crate::sys::{is_alpha, is_alpha_numeric, is_digit};
 
 pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "struct" => TokenType::Struct,
@@ -147,7 +277,12 @@ pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
 };
 
 impl Lexer {
-    pub fn scan_tokens(source_str: &str) -> Vec<Token> {
+    pub fn scan_tokens_file(filepath: &str) -> anyhow::Result<LexResult> {
+        let source = std::fs::read_to_string(filepath)?;
+        let s = Self::scan_tokens(source.as_ref());
+        Ok(s)
+    }
+    pub fn scan_tokens(source_str: &str) -> LexResult {
         let mut lex = Self::new(source_str);
         while !lex.is_cursor_at_end() {
             let c = lex.next_token();
@@ -163,6 +298,14 @@ impl Lexer {
                 '+' => (TokenType::Plus, None),
 
                 ';' => (TokenType::Semicolon, None),
+                ':' => (
+                    if lex.match_next(':') {
+                        TokenType::DoubleColon
+                    } else {
+                        TokenType::Colon
+                    },
+                    None,
+                ),
                 '*' => (TokenType::Star, None),
                 '!' => (
                     if lex.match_next('=') {
@@ -176,6 +319,8 @@ impl Lexer {
                 '=' => (
                     if lex.match_next('=') {
                         TokenType::EqualEqual
+                    } else if lex.match_next('>') {
+                        TokenType::FatArrow
                     } else {
                         TokenType::Equal
                     },
@@ -202,7 +347,7 @@ impl Lexer {
                 '/' => {
                     let ty = if lex.match_next('/') {
                         while !lex.is_cursor_at_end() && lex.peek() != '\n' {
-                            lex.cursor.i += 1;
+                            lex.advance_cursor(1);
                         }
                         TokenType::Comment
                     } else {
@@ -210,14 +355,90 @@ impl Lexer {
                     };
                     (ty, None)
                 }
+                '"' => (TokenType::String, lex.select_string()),
                 _ => {
-                    todo!()
+                    if is_digit(c) {
+                        (TokenType::Number, lex.select_number())
+                    } else if is_alpha(c) {
+                        (lex.select_ident(), None)
+                    } else {
+                        lex.errors.push(format!(
+                            "{} :: Unexpected Character - {}",
+                            lex.cursor.lineno, c
+                        ));
+                        (TokenType::Unknown, None)
+                    }
                 }
             };
             let token = lex.cursor.to_token(source_str, ty, literal);
             lex.tokens.push(token);
         }
-        lex.tokens
+        LexResult {
+            tokens: lex.tokens,
+            errors: lex.errors,
+        }
+    }
+
+    #[inline]
+    fn advance_cursor(&mut self, n: usize) {
+        self.cursor.i += n;
+    }
+
+    fn select_number(&mut self) -> Option<val::ObjectVal> {
+        while is_digit(self.peek()) {
+            self.advance_cursor(1);
+        }
+
+        if self.peek() == '.' && is_digit(self.peekn(1)) {
+            self.advance_cursor(1);
+            while is_digit(self.peek()) {
+                self.advance_cursor(1);
+            }
+        }
+        if let std::result::Result::Ok(value) =
+            self.source_str[self.cursor.start..self.cursor.i].parse::<f64>()
+        {
+            Some(val::ObjectVal::Number(value))
+        } else {
+            self.errors
+                .push(format!("{} :: Error parsing number", self.cursor.lineno));
+            None
+        }
+    }
+    fn select_ident(&mut self) -> TokenType {
+        while is_alpha_numeric(self.peek()) {
+            self.advance_cursor(1);
+        }
+        let value = self.source_str[self.cursor.start..self.cursor.i].to_string();
+
+        if let Some(ty) = KEYWORDS.get(&value) {
+            *ty
+        } else {
+            TokenType::Ident
+        }
+    }
+
+    fn select_string(&mut self) -> Option<val::ObjectVal> {
+        while !self.is_cursor_at_end() && self.peek() != '"' {
+            if self.peek() == '\n' {
+                self.cursor.lineno += 1
+            }
+            self.advance_cursor(1);
+        }
+        if self.is_cursor_at_end() {
+            self.errors.push(format!(
+                "{line} :: {message}",
+                line = self.cursor.lineno,
+                message = "Unterminated string"
+            ));
+            None
+        } else {
+            self.advance_cursor(1);
+            let Cursor { start, i, .. } = self.cursor;
+            // snip double quotes on ends of string
+            let value = self.source_str[(start + 1)..(i - 1)].to_string();
+            Some(val::ObjectVal::String(value))
+        }
     }
 
     fn is_cursor_at_end(&self) -> bool {
@@ -228,7 +449,7 @@ impl Lexer {
         if self.is_cursor_at_end() || self.peek() != c {
             false
         } else {
-            self.cursor.i += 1;
+            self.advance_cursor(1);
             true
         }
     }
@@ -251,10 +472,10 @@ impl Lexer {
                 if c == '\n' {
                     self.cursor.lineno += 1;
                 }
-                self.cursor.i += 1;
+                self.advance_cursor(1);
             } else {
                 self.cursor.start = self.cursor.i;
-                self.cursor.i += 1;
+                self.advance_cursor(1);
                 return c;
             }
         }
@@ -263,6 +484,7 @@ impl Lexer {
     fn new(source_str: &str) -> Self {
         Self {
             source: source_str.as_bytes().to_vec(),
+            source_str: String::from(source_str),
             tokens: Vec::new(),
             errors: Vec::new(),
             cursor: Cursor::default(),
@@ -275,27 +497,37 @@ impl Lexer {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cursor {
-    start: usize,
-    i: usize,
-    lineno: u32,
+    pub start: usize,
+    pub i: usize,
+    pub lineno: u32,
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Cursor {
     pub fn new() -> Self {
         Self {
             lineno: 1,
-            ..Self::default()
+            start: 0,
+            i: 0,
         }
     }
 
-    pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<Literal>) -> Token {
+    pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<val::ObjectVal>) -> Token {
         Token {
             ty,
-            literal: literal.unwrap_or(Literal::Nil),
+            literal: literal.unwrap_or(val::ObjectVal::Nil),
             line: self.lineno,
-            lexeme: source[self.start..self.i].to_string(),
+            lexeme: match ty {
+                TokenType::String => source[self.start + 1..self.i - 1].to_string(),
+                _ => source[self.start..self.i].to_string(),
+            },
         }
     }
 }

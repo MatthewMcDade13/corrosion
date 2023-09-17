@@ -11,5 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0.75"
+clap = { version = "4.4.3", features = ["cargo"] }
 log = "0.4.20"
 phf = { version = "0.11.2", features = ["macros"] }
+thiserror = "1.0.48"
