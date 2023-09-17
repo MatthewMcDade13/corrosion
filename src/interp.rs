@@ -1,5 +1,5 @@
 use crate::{
-    ast::{expr, AstWalkError, AstWalker},
+    ast::{self, AstWalkError, AstWalker},
     lex::{
         val::{self, ObjectVal},
         Token, TokenType,
@@ -10,15 +10,15 @@ use anyhow::*;
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn eval(expr: &expr::Expr) -> anyhow::Result<ObjectVal> {
+    pub fn eval(expr: &ast::Expr) -> anyhow::Result<ObjectVal> {
         expr.walk(&mut Interpreter)
     }
 }
 
 impl AstWalker<val::ObjectVal> for Interpreter {
-    fn visit_expr(&mut self, expr: &expr::Expr) -> anyhow::Result<val::ObjectVal> {
+    fn visit_expr(&mut self, expr: &ast::Expr) -> anyhow::Result<val::ObjectVal> {
         match expr {
-            expr::Expr::Binary {
+            ast::Expr::Binary {
                 left,
                 operator,
                 right,
@@ -45,9 +45,9 @@ impl AstWalker<val::ObjectVal> for Interpreter {
                     ),
                 }
             }
-            expr::Expr::Grouping(e) => Ok(e.walk(self)?),
-            expr::Expr::Literal(lit) => Ok(lit.clone()),
-            expr::Expr::Unary { operator, right } => {
+            ast::Expr::Grouping(e) => Ok(e.walk(self)?),
+            ast::Expr::Literal(lit) => Ok(lit.clone()),
+            ast::Expr::Unary { operator, right } => {
                 let value = right.walk(self)?;
                 match operator.ty {
                     TokenType::Minus => eval_minus(operator, &value),

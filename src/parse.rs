@@ -1,5 +1,5 @@
 use crate::{
-    ast::expr::{self, Expr, ExprRule},
+    ast::Expr,
     lex::{val::ObjectVal, Cursor, Token, TokenType},
 };
 use anyhow::*;
@@ -182,41 +182,5 @@ impl Parser {
 
     fn prev(&self) -> &Token {
         &self.tokens[self.cursor.i - 1]
-    }
-
-    fn expand_binary_expr(
-        &mut self,
-        expr_type: expr::ExprRule,
-        match_tokens: &[TokenType],
-    ) -> Result<Expr> {
-        let mut expr = self.select_expand_expr(expr_type)?;
-        loop {
-            if match_tokens.iter().any(|x| self.peek().ty == *x) {
-                self.advance(1);
-                let operator = self.prev().clone();
-                let right = self.select_expand_expr(expr_type)?;
-                expr = Expr::Binary {
-                    left: Box::new(expr),
-                    operator,
-                    right: Box::new(right),
-                }
-            } else {
-                break;
-            }
-        }
-
-        Ok(expr)
-    }
-
-    fn select_expand_expr(&mut self, expr_type: expr::ExprRule) -> anyhow::Result<Expr> {
-        match expr_type {
-            expr::ExprRule::Expression => self.expression(),
-            expr::ExprRule::Equality => self.equality(),
-            expr::ExprRule::Comparison => self.comparison(),
-            expr::ExprRule::Term => self.term(),
-            expr::ExprRule::Factor => self.factor(),
-            expr::ExprRule::Unary => self.unary(),
-            expr::ExprRule::Primary => self.primary(),
-        }
     }
 }

@@ -4,7 +4,7 @@ mod lex;
 mod parse;
 mod sys;
 
-use ast::expr::Expr;
+use ast::Expr;
 use clap::{arg, command};
 
 use interp::Interpreter;
