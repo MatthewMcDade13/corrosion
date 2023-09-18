@@ -1,5 +1,5 @@
 use crate::{
-    ast::Expr,
+    ast::{AstWalkError, AstWalker, Expr, Stmt},
     lex::{val::ObjectVal, Cursor, Token, TokenType},
 };
 use anyhow::*;
@@ -11,14 +11,132 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn parse(tokens: &[Token]) -> anyhow::Result<Expr> {
+    pub fn parse(tokens: &[Token]) -> anyhow::Result<Vec<Stmt>> {
         let mut p = Self {
             cursor: Cursor::new(),
             tokens: tokens.to_vec(),
         };
-        let expr = p.expression()?;
+        let mut statements = Vec::new();
+        while !p.is_eof() {
+            if let Some(stmt) = p.declaration() {
+                statements.push(stmt);
+            }
+        }
+        Ok(statements)
+    }
 
-        Ok(expr)
+    /// advance cursor to the next expression
+    fn synchronize(&mut self) {
+        self.advance(1);
+        while !self.is_eof() {
+            if let TokenType::Semicolon = self.prev().ty {
+                break;
+            }
+            match self.peek().ty {
+                TokenType::Struct
+                | TokenType::Fn
+                | TokenType::Let
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => break,
+                _ => self.advance(1),
+            }
+        }
+    }
+
+    // Option as parsing an invalid declaration just results in that declaration getting ignored.
+    // we should probably do some logging or error reporting at a higher level so invalid
+    // declarations can be known about and arent completely silently ignored.
+    fn declaration(&mut self) -> Option<Stmt> {
+        let result = if let TokenType::Let = self.peek().ty {
+            self.let_statement()
+        } else {
+            self.statement()
+        };
+        match result {
+            anyhow::Result::Ok(stmt) => Some(stmt),
+            Err(_) => {
+                self.synchronize();
+                None
+            }
+        }
+    }
+
+    fn let_statement(&mut self) -> anyhow::Result<Stmt> {
+        if let TokenType::Ident = self.peek().ty {
+            let name = self.peek().clone();
+            self.advance(1);
+            let initializer = if let TokenType::Equal = self.peek().ty {
+                self.advance(1);
+                Some(self.expression()?)
+            } else {
+                None
+            };
+
+            if let TokenType::Semicolon = self.peek().ty {
+                self.advance(1);
+                Ok(Stmt::Let { name, initializer })
+            } else {
+                bail!(
+                    "{}",
+                    AstWalkError::ParseError {
+                        token: self.peek().clone(),
+                        message: "Expected ';' after let statement".into()
+                    }
+                )
+            }
+        } else {
+            bail!(
+                "{}",
+                AstWalkError::ParseError {
+                    token: self.peek().clone(),
+                    message: "Expected variable name".into()
+                }
+            )
+        }
+    }
+
+    fn statement(&mut self) -> anyhow::Result<Stmt> {
+        if let TokenType::Print = self.peek().ty {
+            self.advance(1);
+            self.statement_print()
+        } else {
+            self.statement_expression()
+        }
+    }
+
+    fn statement_print(&mut self) -> anyhow::Result<Stmt> {
+        let expr = self.expression()?;
+        if let TokenType::Semicolon = self.peek().ty {
+            self.advance(1);
+            Ok(Stmt::Print(expr))
+        } else {
+            bail!(
+                "{}",
+                AstWalkError::ParseError {
+                    token: self.peek().clone(),
+                    message: "Expected ';' after value".into()
+                }
+            )
+        }
+    }
+
+    fn statement_expression(&mut self) -> anyhow::Result<Stmt> {
+        let expr = self.expression()?;
+        if let TokenType::Semicolon = self.peek().ty {
+            self.advance(1);
+            Ok(Stmt::Expression(expr))
+        } else {
+            bail!(
+                "{}",
+                AstWalkError::ParseError {
+                    token: self.peek().clone(),
+                    message: "Expected ';' after expression".into()
+                }
+            )
+        }
     }
 
     fn expression(&mut self) -> anyhow::Result<Expr> {
@@ -132,9 +250,14 @@ impl Parser {
                     ))
                 }
             }
+            TokenType::Ident => {
+                let name = self.peek().clone();
+                self.advance(1);
+                Ok(Expr::Name(name))
+            }
             _ => Err(anyhow!(
                 "Expected primary or group expression, found: {:?}",
-                self.peek().ty
+                self.peek()
             )),
         }
     }

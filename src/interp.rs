@@ -1,5 +1,5 @@
 use crate::{
-    ast::{self, AstWalkError, AstWalker},
+    ast::{self, AstWalkError, AstWalker, Expr, Stmt},
     lex::{
         val::{self, ObjectVal},
         Token, TokenType,
@@ -10,13 +10,37 @@ use anyhow::*;
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn eval(expr: &ast::Expr) -> anyhow::Result<ObjectVal> {
-        expr.walk(&mut Interpreter)
+    pub fn new() -> Self {
+        Self
+    }
+    pub fn execute(&mut self, statements: &[Stmt]) -> anyhow::Result<()> {
+        for stmt in statements {
+            stmt.walk(self)?;
+        }
+        Ok(())
+    }
+    pub fn eval(&mut self, expr: &ast::Expr) -> anyhow::Result<ObjectVal> {
+        expr.walk(self)
     }
 }
 
-impl AstWalker<val::ObjectVal> for Interpreter {
-    fn visit_expr(&mut self, expr: &ast::Expr) -> anyhow::Result<val::ObjectVal> {
+impl AstWalker<Stmt, ()> for Interpreter {
+    fn visit(&mut self, stmt: &ast::Stmt) -> anyhow::Result<()> {
+        match stmt {
+            Stmt::Expression(expr) => {
+                let _ = self.eval(expr)?;
+            }
+            Stmt::Print(expr) => {
+                let value = self.eval(expr)?;
+                println!("{}", value);
+            }
+        };
+        Ok(())
+    }
+}
+
+impl AstWalker<Expr, val::ObjectVal> for Interpreter {
+    fn visit(&mut self, expr: &ast::Expr) -> anyhow::Result<val::ObjectVal> {
         match expr {
             ast::Expr::Binary {
                 left,

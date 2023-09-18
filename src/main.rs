@@ -1,4 +1,5 @@
 mod ast;
+mod env;
 mod interp;
 mod lex;
 mod parse;
@@ -27,11 +28,13 @@ fn main() -> anyhow::Result<()> {
         LexResult::empty()
     };
 
-    let expr = Parser::parse(lex_result.tokens.as_ref())?;
-    let result_str = Interpreter::eval(&expr)?;
-    println!("{}", lex_result.to_string());
-    println!("{}", AstStringify.stringify(&expr)?);
-    println!("{}", result_str);
+    let stmts = Parser::parse(lex_result.tokens.as_ref())?;
+    let mut interp = Interpreter::new();
+    interp.execute(stmts.as_slice())?;
+
+    // println!("{}", lex_result.to_string());
+    // println!("{}", AstStringify.stringify(&expr)?);
+    // println!("{}", result_str);
     // print_expr();
     Ok(())
 }

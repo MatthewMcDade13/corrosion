@@ -21,6 +21,11 @@ Corrosion (.corr) Programming Language
 - No Nil and Optional Types? or both?
 - do Structs or Modules implement Traits/Behaviors? (javascript vs Elixir implementation of interface/behavior respectively)
 
+#### Declarations
+- var :: similar to Rust's 'let mut', allows reassignment, but not rebinding
+- let :: similar to Rust's let, allows rebinding, but not reassignment
+- const :: Does not allow rebinding, or reassignment, unique identifier in current scope. 
+    I may also enfore the binding it points to to be immutable, but for now its not and will work similarly to Javascript's 'const'
 
 #### Compile Targets
 - ECMAScript/WebAssembly

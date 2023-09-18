@@ -19,21 +19,40 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+    Name(Token),
 }
 
 impl Expr {
     pub fn walk<T, R>(&self, visitor: &mut T) -> anyhow::Result<R>
     where
-        T: AstWalker<R>,
+        T: AstWalker<Self, R>,
     {
-        visitor.visit_expr(self)
+        visitor.visit(self)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+    Let {
+        name: Token,
+        initializer: Option<Expr>,
+    },
+}
+impl Stmt {
+    pub fn walk<T, R>(&self, visitor: &mut T) -> anyhow::Result<R>
+    where
+        T: AstWalker<Self, R>,
+    {
+        visitor.visit(self)
     }
 }
 
 pub struct AstStringify;
 
-pub trait AstWalker<T> {
-    fn visit_expr(&mut self, expr: &Expr) -> anyhow::Result<T>;
+pub trait AstWalker<T, R> {
+    fn visit(&mut self, node: &T) -> anyhow::Result<R>;
 }
 
 #[derive(Error, Debug)]
@@ -42,6 +61,8 @@ pub enum AstWalkError {
     RuntimeError { token: Token, message: String },
     #[error("Type Error :: {value} => {message}")]
     TypeError { value: ObjectVal, message: String },
+    #[error("Parse Error :: {token} - {message}")]
+    ParseError { token: Token, message: String },
 }
 
 impl AstStringify {
@@ -60,8 +81,8 @@ impl AstStringify {
     }
 }
 
-impl AstWalker<String> for AstStringify {
-    fn visit_expr(&mut self, expr: &Expr) -> anyhow::Result<String> {
+impl AstWalker<Expr, String> for AstStringify {
+    fn visit(&mut self, expr: &Expr) -> anyhow::Result<String> {
         match expr {
             Expr::Binary {
                 left,

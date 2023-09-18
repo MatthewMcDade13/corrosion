@@ -3,6 +3,7 @@ use std::{collections::HashMap, fs::File, path::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
+    Print,
     FatArrow,
     LeftBrace,
     RightBrace,
@@ -308,13 +309,15 @@ pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "while" => TokenType::While,
     "break" => TokenType::Break,
     "switch" => TokenType::Switch,
-    "continue" => TokenType::Continue
+    "continue" => TokenType::Continue,
+    "print" => TokenType::Print,
 };
 
 impl Lexer {
     pub fn scan_tokens_file(filepath: &str) -> anyhow::Result<LexResult> {
         let source = std::fs::read_to_string(filepath)?;
-        let s = Self::scan_tokens(source.as_ref());
+
+        let s = Self::scan_tokens(source.trim());
         Ok(s)
     }
     pub fn scan_tokens(source_str: &str) -> LexResult {
