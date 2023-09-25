@@ -28,5 +28,33 @@ Corrosion (.corr) Programming Language
     I may also enfore the binding it points to to be immutable, but for now its not and will work similarly to Javascript's 'const'
 
 #### Compile Targets
-- ECMAScript/WebAssembly
+- ECMAScrit/WebAssembly
 - LLVM:
+
+
+
+#### Tentative syntax
+
+`
+mod math;
+
+@spec add(number(), number()) -> number()
+fn add(a, b) {
+    a + b
+}
+
+trait Eq {
+    fn eq(self, other);
+}
+
+fn is_equal(a, b) where is_type(a, Eq) && is_type(b, Eq) {
+    a.eq(b)
+}
+
+fn is_equal(a, b) {
+    a == b
+}
+
+
+`
+

@@ -6,7 +6,7 @@ mod parse;
 mod sys;
 
 use ast::Expr;
-use clap::{arg, command};
+use clap::{arg, command, Command};
 
 use interp::Interpreter;
 use lex::{LexResult, Lexer, TokenType};
@@ -15,28 +15,44 @@ use parse::Parser;
 use crate::{ast::AstStringify, lex::val::ObjectVal};
 
 fn main() -> anyhow::Result<()> {
-    let args = command!()
-        .arg(arg!(--file <FILEPATH>).required_unless_present("raw"))
-        .arg(arg!(--raw <STRING>).required_unless_present("file"))
+    let args = Command::new("corrosion")
+        .about("Corrosion Programming Language Interpreter and Compiler")
+        .version("0.0.1")
+        // .subcommand_required(true)
+        .arg_required_else_help(true)
+        .arg(arg!([filepath] "path to script to run").required(false))
         .get_matches();
 
-    let lex_result = if let Some(filepath) = args.get_one::<String>("file") {
-        Lexer::scan_tokens_file(filepath)?
-    } else if let Some(raw) = args.get_one::<String>("raw") {
-        Lexer::scan_tokens(raw)
+    if let Some(filepath) = args.get_one::<String>("filepath") {
+        let result = Lexer::scan_tokens_file(filepath)?;
+
+        let stmts = Parser::parse(result.tokens.as_ref())?;
+        let mut interp = Interpreter::new();
+        interp.execute_block(stmts.as_slice())?;
     } else {
-        LexResult::empty()
+        run_repl()?;
     };
 
-    let stmts = Parser::parse(lex_result.tokens.as_ref())?;
-    let mut interp = Interpreter::new();
-    interp.execute(stmts.as_slice())?;
-
-    // println!("{}", lex_result.to_string());
     // println!("{}", AstStringify.stringify(&expr)?);
     // println!("{}", result_str);
     // print_expr();
     Ok(())
+}
+
+// TODO(FIXME) :: Fix repl
+fn run_repl() -> anyhow::Result<()> {
+    let mut interp = Interpreter::new();
+    loop {
+        let mut buffer = String::new();
+        print!("> ");
+        std::io::stdin().read_line(&mut buffer)?;
+        let result = Lexer::scan_tokens(&buffer);
+
+        let stmts = Parser::parse(result.tokens.as_ref())?;
+        if let Some(s) = stmts.first() {
+            interp.execute(s)?;
+        }
+    }
 }
 
 /// (* (- 123) (group 45.67))

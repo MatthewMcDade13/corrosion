@@ -51,6 +51,7 @@ impl Parser {
     // declarations can be known about and arent completely silently ignored.
     fn declaration(&mut self) -> Option<Stmt> {
         let result = if let TokenType::Let = self.peek().ty {
+            self.advance(1);
             self.let_statement()
         } else {
             self.statement()
@@ -99,11 +100,43 @@ impl Parser {
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt> {
-        if let TokenType::Print = self.peek().ty {
-            self.advance(1);
-            self.statement_print()
+        match self.peek().ty {
+            TokenType::Print => {
+                self.advance(1);
+                self.statement_print()
+            }
+            TokenType::LeftBrace => {
+                self.advance(1);
+                Ok(Stmt::Block(self.block()?))
+            }
+            _ => self.statement_expression(),
+        }
+    }
+
+    fn block(&mut self) -> anyhow::Result<Vec<Stmt>> {
+        let mut statements = Vec::new();
+        while self.peek().ty != TokenType::RightBrace && !self.is_eof() {
+            match self.declaration() {
+                Some(stmt) => statements.push(stmt),
+                None => bail!(
+                    "{}",
+                    AstWalkError::ParseError {
+                        token: self.peek().clone(),
+                        message: "invalid declaration".into()
+                    }
+                ),
+            };
+        }
+        if let TokenType::RightBrace = self.peek().ty {
+            Ok(statements)
         } else {
-            self.statement_expression()
+            bail!(
+                "{}",
+                AstWalkError::ParseError {
+                    token: self.peek().clone(),
+                    message: "Expect '}' after block.".into()
+                }
+            )
         }
     }
 
@@ -139,8 +172,34 @@ impl Parser {
         }
     }
 
+    fn assignment(&mut self) -> anyhow::Result<Expr> {
+        let expr = self.equality()?;
+
+        if let TokenType::Equal = self.peek().ty {
+            self.advance(1);
+            let equals = self.prev().clone();
+            let value = self.assignment()?;
+            if let Expr::Name(name) = expr {
+                Ok(Expr::Assignment {
+                    name,
+                    value: Box::new(value),
+                })
+            } else {
+                bail!(
+                    "{}",
+                    AstWalkError::ParseError {
+                        token: equals,
+                        message: "Invalid assignment target".into()
+                    }
+                )
+            }
+        } else {
+            Ok(expr)
+        }
+    }
+
     fn expression(&mut self) -> anyhow::Result<Expr> {
-        self.equality()
+        self.assignment()
     }
     fn term(&mut self) -> anyhow::Result<Expr> {
         // self.expand_binary_expr(ExprRule::Factor, &[TokenType::Minus, TokenType::Plus])

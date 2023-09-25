@@ -1,5 +1,8 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     ast::{self, AstWalkError, AstWalker, Expr, Stmt},
+    env::{Env, Scope},
     lex::{
         val::{self, ObjectVal},
         Token, TokenType,
@@ -7,18 +10,37 @@ use crate::{
 };
 use anyhow::*;
 
-pub struct Interpreter;
+#[derive(Debug)]
+pub struct Interpreter {
+    env: Env,
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self { env: Env::new() }
+    }
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
-    pub fn execute(&mut self, statements: &[Stmt]) -> anyhow::Result<()> {
+    pub fn execute(&mut self, stmt: &Stmt) -> anyhow::Result<()> {
+        stmt.walk(self)
+    }
+
+    pub fn execute_block(&mut self, statements: &[Stmt]) -> anyhow::Result<()> {
+        self.env.push_scope(Scope::default());
         for stmt in statements {
-            stmt.walk(self)?;
+            if let Err(e) = self.execute(stmt) {
+                self.env.pop_scope();
+                bail!("{}", e);
+            };
         }
+        self.env.pop_scope();
         Ok(())
     }
+
     pub fn eval(&mut self, expr: &ast::Expr) -> anyhow::Result<ObjectVal> {
         expr.walk(self)
     }
@@ -27,12 +49,21 @@ impl Interpreter {
 impl AstWalker<Stmt, ()> for Interpreter {
     fn visit(&mut self, stmt: &ast::Stmt) -> anyhow::Result<()> {
         match stmt {
+            Stmt::Block(block) => self.execute_block(block)?,
             Stmt::Expression(expr) => {
                 let _ = self.eval(expr)?;
             }
             Stmt::Print(expr) => {
                 let value = self.eval(expr)?;
                 println!("{}", value);
+            }
+            Stmt::Let { name, initializer } => {
+                let value = if let Some(init) = initializer {
+                    self.eval(init)?
+                } else {
+                    ObjectVal::Unit
+                };
+                self.env.define(&name.lexeme, &value);
             }
         };
         Ok(())
@@ -85,6 +116,12 @@ impl AstWalker<Expr, val::ObjectVal> for Interpreter {
                         )
                     }
                 }
+            }
+            ast::Expr::Name(name) => self.env.get(name),
+            ast::Expr::Assignment { name, value } => {
+                let value = self.eval(value)?;
+                self.env.assign(name, &value)?;
+                Ok(value)
             }
         }
     }

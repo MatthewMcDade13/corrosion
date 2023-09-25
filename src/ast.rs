@@ -19,6 +19,10 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+    Assignment {
+        name: Token,
+        value: Box<Expr>,
+    },
     Name(Token),
 }
 
@@ -33,6 +37,7 @@ impl Expr {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    Block(Vec<Stmt>),
     Expression(Expr),
     Print(Expr),
     Let {
@@ -64,7 +69,6 @@ pub enum AstWalkError {
     #[error("Parse Error :: {token} - {message}")]
     ParseError { token: Token, message: String },
 }
-
 impl AstStringify {
     pub fn stringify(&mut self, e: &Expr) -> anyhow::Result<String> {
         e.walk(self)
@@ -96,6 +100,8 @@ impl AstWalker<Expr, String> for AstStringify {
                 _ => Ok(lit.to_string()),
             },
             Expr::Unary { operator, right } => self.lispify(&operator.lexeme, &[&right.as_ref()]),
+            Expr::Name(name) => Ok(name.lexeme.clone()),
+            Expr::Assignment { name, value } => self.lispify(&name.lexeme, &[&value.as_ref()]),
         }
     }
 }
