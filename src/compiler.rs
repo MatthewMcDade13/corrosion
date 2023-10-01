@@ -16,6 +16,13 @@ struct Parser {
 }
 
 impl Parser {
+
+
+
+
+
+
+
     #[inline]
     fn advance(&mut self, n: usize) {
         self.i += n;
@@ -384,7 +391,7 @@ pub fn compile(tokens: &[Token]) -> anyhow::Result<Chunk> {
     };
 
     // p.advance(1);
-    p.expression()?;
+    while p.current
     // p.expect(
     // TokenType::Eof,
     // &format!("Expected end of file token, got {:?}", p.current().ty),
