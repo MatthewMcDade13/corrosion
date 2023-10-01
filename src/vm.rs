@@ -8,10 +8,10 @@ use crate::{
 };
 
 macro_rules! binary_op {
-    ($vm:ident, $op:tt) => {
+    ($vm:ident, $op:tt, $op_return:expr) => {
         let b = $vm.pop()?.as_number()?;
         let a = $vm.pop()?.as_number()?;
-        $vm.push(Value::Number(a $op b));
+        $vm.push($op_return(a $op b));
     };
 }
 
@@ -70,9 +70,7 @@ impl VM {
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         while self.pc < self.chunk.instructions_len() {
-            debug!("{}", self.chunk.print_instructions());
             let op = self.next_op();
-            println!("Current Op: {op:?}");
             match op.ty() {
                 OpcodeType::Return => {
                     println!("{}", self.pop()?);
@@ -93,16 +91,37 @@ impl VM {
                     }
                 }
                 OpcodeType::Add => {
-                    binary_op!(self, +);
+                    binary_op!(self, +, Value::Number);
                 }
                 OpcodeType::Subtract => {
-                    binary_op!(self, -);
+                    binary_op!(self, -, Value::Number);
                 }
                 OpcodeType::Mult => {
-                    binary_op!(self, *);
+                    binary_op!(self, *, Value::Number);
                 }
                 OpcodeType::Div => {
-                    binary_op!(self, /);
+                    binary_op!(self, /, Value::Number);
+                }
+                OpcodeType::Nil => {
+                    self.push(Value::Nil);
+                }
+                OpcodeType::False => self.push(Value::Boolean(false)),
+                OpcodeType::True => self.push(Value::Boolean(true)),
+                OpcodeType::Not => {
+                    let iback = self.stack.len() - 1;
+                    let val = &self.stack[iback];
+                    self.stack[iback] = Value::Boolean(val.is_falsey());
+                }
+                OpcodeType::Equal => {
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    self.push(Value::Boolean(a == b));
+                }
+                OpcodeType::GreaterThan => {
+                    binary_op!(self, >, Value::Boolean);
+                }
+                OpcodeType::LessThan => {
+                    binary_op!(self, <, Value::Boolean);
                 }
                 OpcodeType::Unknown => {
                     bail!("Unknown opcode encountered: {:X}", op.0)
@@ -126,6 +145,13 @@ impl Opcode {
             Self(4) => OpcodeType::Subtract,
             Self(5) => OpcodeType::Mult,
             Self(6) => OpcodeType::Div,
+            Self(7) => OpcodeType::Nil,
+            Self(8) => OpcodeType::True,
+            Self(9) => OpcodeType::False,
+            Self(10) => OpcodeType::Not,
+            Self(11) => OpcodeType::Equal,
+            Self(12) => OpcodeType::GreaterThan,
+            Self(13) => OpcodeType::LessThan,
             _ => OpcodeType::Unknown,
         }
     }
@@ -152,5 +178,12 @@ pub enum OpcodeType {
     Subtract,
     Mult,
     Div,
+    Nil,
+    True,
+    False,
+    Not,
+    Equal,
+    GreaterThan,
+    LessThan,
     Unknown,
 }

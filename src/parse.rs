@@ -291,9 +291,9 @@ impl Parser {
                 self.advance(1);
                 Ok(Expr::Literal(Value::Boolean(true)))
             }
-            TokenType::Unit => {
+            TokenType::Nil => {
                 self.advance(1);
-                Ok(Expr::Literal(Value::Unit))
+                Ok(Expr::Literal(Value::Nil))
             }
             TokenType::Number | TokenType::String => {
                 self.advance(1);

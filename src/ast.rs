@@ -93,7 +93,7 @@ impl AstWalker<Expr, String> for AstStringify {
             } => self.lispify(&operator.lexeme, &[left.as_ref(), right.as_ref()]),
             Expr::Grouping(exp) => self.lispify("group", &[&exp.as_ref()]),
             Expr::Literal(lit) => match lit {
-                Value::Unit => Ok("nil".into()),
+                Value::Nil => Ok("nil".into()),
 
                 _ => Ok(lit.to_string()),
             },

@@ -23,6 +23,21 @@ impl Parser {
     fn expression(&mut self) -> anyhow::Result<()> {
         self.parse_precedence(Precedence::Assignment)
     }
+
+    // true, false, nil
+    fn literal(&mut self) -> anyhow::Result<()> {
+        match self.prev().ty {
+            TokenType::Nil => self.bytecode.add_opcode(OpcodeType::Nil.into()),
+            TokenType::False => self.bytecode.add_opcode(OpcodeType::False.into()),
+            TokenType::True => self.bytecode.add_opcode(OpcodeType::True.into()),
+            _ => unreachable!(
+                "Expected token to be a literal (true, false, nil), got: {}",
+                self.prev()
+            ),
+        };
+        Ok(())
+    }
+
     fn number(&mut self) -> anyhow::Result<()> {
         // TODO :: Typecheck this!!!
         if self.prev().ty == TokenType::Number {
@@ -45,6 +60,7 @@ impl Parser {
 
         match op_type {
             TokenType::Minus => self.bytecode.add_opcode(OpcodeType::Negate.into()),
+            TokenType::Bang => self.bytecode.add_opcode(OpcodeType::Not.into()),
             _ => unreachable!("Unreachable branch in compiler::Parser::unary"),
         };
         Ok(())
@@ -60,6 +76,18 @@ impl Parser {
             TokenType::Minus => self.bytecode.add_opcode(OpcodeType::Subtract.into()),
             TokenType::Star => self.bytecode.add_opcode(OpcodeType::Mult.into()),
             TokenType::ForwardSlash => self.bytecode.add_opcode(OpcodeType::Div.into()),
+            TokenType::BangEqual => self
+                .bytecode
+                .add_opcodes(OpcodeType::Equal.into(), OpcodeType::Not.into()),
+            TokenType::EqualEqual => self.bytecode.add_opcode(OpcodeType::Equal.into()),
+            TokenType::Gt => self.bytecode.add_opcode(OpcodeType::GreaterThan.into()),
+            TokenType::Ge => self
+                .bytecode
+                .add_opcodes(OpcodeType::LessThan.into(), OpcodeType::Not.into()),
+            TokenType::Lt => self.bytecode.add_opcode(OpcodeType::LessThan.into()),
+            TokenType::Le => self
+                .bytecode
+                .add_opcodes(OpcodeType::GreaterThan.into(), OpcodeType::Not.into()),
             _ => unreachable!("Unreachable branch in compiler::Parser::binary"),
         };
         Ok(())
@@ -212,14 +240,14 @@ fn get_parse_rule(ty: TokenType) -> ParseRule {
         TokenType::Semicolon => ParseRule::none(),
         TokenType::ForwardSlash => ParseRule::with_infix(Parser::binary, Some(Precedence::Factor)),
         TokenType::Star => ParseRule::with_infix(Parser::binary, Some(Precedence::Factor)),
-        TokenType::Bang => ParseRule::none(),
+        TokenType::Bang => ParseRule::with_prefix(Parser::unary, None),
         TokenType::Equal => ParseRule::none(),
-        TokenType::BangEqual => ParseRule::none(),
-        TokenType::EqualEqual => ParseRule::none(),
-        TokenType::Gt => ParseRule::none(),
-        TokenType::Ge => ParseRule::none(),
-        TokenType::Lt => ParseRule::none(),
-        TokenType::Le => ParseRule::none(),
+        TokenType::BangEqual => ParseRule::with_infix(Parser::binary, Some(Precedence::Equality)),
+        TokenType::EqualEqual => ParseRule::with_infix(Parser::binary, Some(Precedence::Equality)),
+        TokenType::Gt => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
+        TokenType::Ge => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
+        TokenType::Lt => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
+        TokenType::Le => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
         TokenType::Ident => ParseRule::none(),
         TokenType::String => ParseRule::none(),
         TokenType::Number => ParseRule::with_prefix(Parser::number, None),
@@ -228,11 +256,11 @@ fn get_parse_rule(ty: TokenType) -> ParseRule {
         TokenType::Trait => ParseRule::none(),
         TokenType::Impl => ParseRule::none(),
         TokenType::Else => ParseRule::none(),
-        TokenType::False => ParseRule::none(),
-        TokenType::True => ParseRule::none(),
+        TokenType::False => ParseRule::with_prefix(Parser::literal, None),
+        TokenType::True => ParseRule::with_prefix(Parser::literal, None),
         TokenType::Fn => ParseRule::none(),
         TokenType::If => ParseRule::none(),
-        TokenType::Unit => ParseRule::none(),
+        TokenType::Nil => ParseRule::with_prefix(Parser::literal, None),
         TokenType::Or => ParseRule::none(),
         TokenType::Return => ParseRule::none(),
         TokenType::Super => ParseRule::none(),
@@ -287,6 +315,12 @@ impl Chunk {
     #[inline]
     pub fn add_opcode(&mut self, code: Opcode) {
         self.instructions.push(code);
+    }
+
+    #[inline]
+    pub fn add_opcodes(&mut self, a: Opcode, b: Opcode) {
+        self.instructions.push(a);
+        self.instructions.push(b);
     }
 
     pub fn add_constant(&mut self, v: Value) {

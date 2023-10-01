@@ -68,7 +68,7 @@ fn print_expr() -> anyhow::Result<()> {
         left: Box::new(Expr::Unary {
             operator: Token {
                 ty: TokenType::Minus,
-                literal: Value::Unit,
+                literal: Value::Nil,
                 line: 1,
                 lexeme: "-".into(),
             },
@@ -76,7 +76,7 @@ fn print_expr() -> anyhow::Result<()> {
         }),
         operator: Token {
             ty: TokenType::Star,
-            literal: Value::Unit,
+            literal: Value::Nil,
             line: 1,
             lexeme: "*".into(),
         },

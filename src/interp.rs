@@ -58,7 +58,7 @@ impl AstWalker<Stmt, ()> for Interpreter {
                 let value = if let Some(init) = initializer {
                     self.eval(init)?
                 } else {
-                    Value::Unit
+                    Value::Nil
                 };
                 self.env.define(&name.lexeme, &value);
             }

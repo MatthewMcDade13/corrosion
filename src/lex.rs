@@ -69,7 +69,7 @@ pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "true" => TokenType::True,
     "false" => TokenType::False,
     "fn" => TokenType::Fn,
-    "nil" => TokenType::Unit,
+    "nil" => TokenType::Nil,
     "and" => TokenType::And,
     "or" => TokenType::Or,
     "return" => TokenType::Return,
@@ -186,7 +186,7 @@ impl Lexer {
         }
         lex.tokens.push(Token {
             ty: TokenType::Eof,
-            literal: Value::Unit,
+            literal: Value::Nil,
             line: 0,
             lexeme: "\0".into(),
         });
@@ -339,7 +339,7 @@ impl Cursor {
     pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<Value>) -> Token {
         Token {
             ty,
-            literal: literal.unwrap_or(Value::Unit),
+            literal: literal.unwrap_or(Value::Nil),
             line: self.lineno,
             lexeme: match ty {
                 TokenType::String => source[self.start + 1..self.i - 1].to_string(),

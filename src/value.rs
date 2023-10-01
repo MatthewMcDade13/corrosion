@@ -34,7 +34,7 @@ pub enum TokenType {
     Fn,
     If,
 
-    Unit,
+    Nil,
     Or,
     Return,
     Super,
@@ -84,7 +84,7 @@ pub enum Value {
     Number(f64),
     String(String),
     Boolean(bool),
-    Unit,
+    Nil,
     // use an Rc for object so we can keep ObjectVal as small as possible
     // OR we can have the language ast::Object wrap a Box/Rc, which is probably more
     // preferrable
@@ -92,6 +92,14 @@ pub enum Value {
 }
 
 impl Value {
+    pub const fn is_falsey(&self) -> bool {
+        match self {
+            Value::Boolean(false) => true,
+            Value::Nil => true,
+            _ => false,
+        }
+    }
+
     pub fn as_number(&self) -> anyhow::Result<f64> {
         let value = self.clone();
         if let Self::Number(n) = value {
@@ -145,7 +153,7 @@ impl Value {
             Value::Number(_) => "Number".into(),
             Value::String(_) => "String".into(),
             Value::Boolean(_) => "Boolean".into(),
-            Value::Unit => "Unit".into(),
+            Value::Nil => "Unit".into(),
         }
     }
 
@@ -164,8 +172,8 @@ impl Value {
         }
     }
 
-    pub const fn is_unit(&self) -> bool {
-        if let Self::Unit = self {
+    pub const fn is_nil(&self) -> bool {
+        if let Self::Nil = self {
             true
         } else {
             false
@@ -197,8 +205,8 @@ impl PartialEq for Value {
                     false
                 }
             }
-            Value::Unit => {
-                if let Value::Unit = other {
+            Value::Nil => {
+                if let Value::Nil = other {
                     true
                 } else {
                     false
@@ -210,7 +218,7 @@ impl PartialEq for Value {
 
 impl Default for Value {
     fn default() -> Self {
-        Self::Unit
+        Self::Nil
     }
 }
 
@@ -220,7 +228,7 @@ impl fmt::Display for Value {
             Value::Number(n) => n.to_string(),
             Value::String(s) => s.clone(),
             Value::Boolean(b) => b.to_string(),
-            Value::Unit => String::from("()"),
+            Value::Nil => String::from("()"),
         };
         write!(f, "{}", str)
     }
