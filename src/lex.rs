@@ -1,236 +1,6 @@
 use anyhow::*;
 use std::{collections::HashMap, fs::File, path::Display};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TokenType {
-    Print,
-    FatArrow,
-    LeftBrace,
-    RightBrace,
-    LeftParen,
-    RightParen,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    Semicolon,
-    ForwardSlash,
-    Star,
-    Bang,
-    Equal,
-    BangEqual,
-    EqualEqual,
-    Gt,
-    Ge,
-    Lt,
-    Le,
-    Ident,
-    String,
-    Number,
-    And,
-    Struct,
-    Trait,
-    Impl,
-    Else,
-    False,
-    True,
-    Fn,
-    If,
-
-    Unit,
-    Or,
-    Return,
-    Super,
-    ThisSelf,
-    Let,
-    Const,
-    Eof,
-    Loop,
-    For,
-    While,
-    Break,
-    Switch,
-    Continue,
-    Comment,
-    Unknown,
-    Colon,
-    DoubleColon,
-}
-
-pub mod val {
-    use anyhow::*;
-    use std::fmt;
-
-    use crate::ast::AstWalkError;
-
-    #[derive(Debug, Clone)]
-    pub enum ObjectVal {
-        Number(f64),
-        String(String),
-        Boolean(bool),
-        Unit,
-        // use an Rc for object so we can keep ObjectVal as small as possible
-        // OR we can have the language ast::Object wrap a Box/Rc, which is probably more
-        // preferrable
-        // Obj(Rc<ast::Object>),
-    }
-
-    impl ObjectVal {
-        pub fn as_number(&self) -> anyhow::Result<f64> {
-            let value = self.clone();
-            if let Self::Number(n) = value {
-                Ok(n)
-            } else {
-                let type_str = value.type_string();
-                bail!(
-                    "{}",
-                    AstWalkError::TypeError {
-                        value,
-                        message: format!("Expected Number, got: {}", type_str)
-                    }
-                )
-            }
-        }
-
-        pub fn as_string(&self) -> anyhow::Result<String> {
-            let value = self.clone();
-            if let Self::String(string) = value {
-                Ok(string)
-            } else {
-                let type_str = value.type_string();
-                bail!(
-                    "{}",
-                    AstWalkError::TypeError {
-                        value,
-                        message: format!("Expected String, got: {}", type_str)
-                    }
-                )
-            }
-        }
-
-        pub fn as_bool(&self) -> anyhow::Result<bool> {
-            let value = self.clone();
-            if let Self::Boolean(b) = value {
-                Ok(b)
-            } else {
-                let type_str = value.type_string();
-                bail!(
-                    "{}",
-                    AstWalkError::TypeError {
-                        value,
-                        message: format!("Expected Boolean, got: {}", type_str)
-                    }
-                )
-            }
-        }
-
-        pub fn type_string(&self) -> String {
-            match self {
-                ObjectVal::Number(_) => "Number".into(),
-                ObjectVal::String(_) => "String".into(),
-                ObjectVal::Boolean(_) => "Boolean".into(),
-                ObjectVal::Unit => "Unit".into(),
-            }
-        }
-
-        pub const fn is_str(&self) -> bool {
-            if let Self::String(_) = self {
-                true
-            } else {
-                false
-            }
-        }
-        pub const fn is_bool(&self) -> bool {
-            if let Self::Boolean(_) = self {
-                true
-            } else {
-                false
-            }
-        }
-
-        pub const fn is_unit(&self) -> bool {
-            if let Self::Unit = self {
-                true
-            } else {
-                false
-            }
-        }
-    }
-
-    impl PartialEq for ObjectVal {
-        fn eq(&self, other: &Self) -> bool {
-            match self {
-                ObjectVal::Number(left) => {
-                    if let ObjectVal::Number(right) = other {
-                        left == right
-                    } else {
-                        false
-                    }
-                }
-                ObjectVal::String(left) => {
-                    if let ObjectVal::String(right) = other {
-                        left == right
-                    } else {
-                        false
-                    }
-                }
-                ObjectVal::Boolean(left) => {
-                    if let ObjectVal::Boolean(right) = other {
-                        left == right
-                    } else {
-                        false
-                    }
-                }
-                ObjectVal::Unit => {
-                    if let ObjectVal::Unit = other {
-                        true
-                    } else {
-                        false
-                    }
-                }
-            }
-        }
-    }
-
-    impl Default for ObjectVal {
-        fn default() -> Self {
-            Self::Unit
-        }
-    }
-
-    impl fmt::Display for ObjectVal {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let str = match self {
-                ObjectVal::Number(n) => n.to_string(),
-                ObjectVal::String(s) => s.clone(),
-                ObjectVal::Boolean(b) => b.to_string(),
-                ObjectVal::Unit => String::from("()"),
-            };
-            write!(f, "{}", str)
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Token {
-    pub ty: TokenType,
-    pub literal: val::ObjectVal,
-    pub line: u32,
-    pub lexeme: String,
-}
-
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self {
-            ty,
-            literal,
-            lexeme,
-            line,
-        } = self;
-        write!(f, "LineNo:{line} {ty:?} :: {lexeme} :: {literal:?}")
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct LexResult {
     pub tokens: Vec<Token>,
@@ -285,7 +55,10 @@ pub struct Lexer {
 }
 use phf::phf_map;
 
-use crate::sys::{is_alpha, is_alpha_numeric, is_digit};
+use crate::{
+    sys::{is_alpha, is_alpha_numeric, is_digit},
+    value::{Token, TokenType, Value},
+};
 
 pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
     "struct" => TokenType::Struct,
@@ -413,7 +186,7 @@ impl Lexer {
         }
         lex.tokens.push(Token {
             ty: TokenType::Eof,
-            literal: val::ObjectVal::Unit,
+            literal: Value::Unit,
             line: 0,
             lexeme: "\0".into(),
         });
@@ -428,7 +201,7 @@ impl Lexer {
         self.cursor.i += n;
     }
 
-    fn select_number(&mut self) -> Option<val::ObjectVal> {
+    fn select_number(&mut self) -> Option<Value> {
         while is_digit(self.peek()) {
             self.advance_cursor(1);
         }
@@ -442,7 +215,7 @@ impl Lexer {
         if let std::result::Result::Ok(value) =
             self.source_str[self.cursor.start..self.cursor.i].parse::<f64>()
         {
-            Some(val::ObjectVal::Number(value))
+            Some(Value::Number(value))
         } else {
             self.errors
                 .push(format!("{} :: Error parsing number", self.cursor.lineno));
@@ -462,7 +235,7 @@ impl Lexer {
         }
     }
 
-    fn select_string(&mut self) -> Option<val::ObjectVal> {
+    fn select_string(&mut self) -> Option<Value> {
         while !self.is_cursor_at_end() && self.peek() != '"' {
             if self.peek() == '\n' {
                 self.cursor.lineno += 1
@@ -481,7 +254,7 @@ impl Lexer {
             let Cursor { start, i, .. } = self.cursor;
             // snip double quotes on ends of string
             let value = self.source_str[(start + 1)..(i - 1)].to_string();
-            Some(val::ObjectVal::String(value))
+            Some(Value::String(value))
         }
     }
 
@@ -563,10 +336,10 @@ impl Cursor {
         }
     }
 
-    pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<val::ObjectVal>) -> Token {
+    pub fn to_token(&self, source: &str, ty: TokenType, literal: Option<Value>) -> Token {
         Token {
             ty,
-            literal: literal.unwrap_or(val::ObjectVal::Unit),
+            literal: literal.unwrap_or(Value::Unit),
             line: self.lineno,
             lexeme: match ty {
                 TokenType::String => source[self.start + 1..self.i - 1].to_string(),

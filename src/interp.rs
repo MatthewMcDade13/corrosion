@@ -3,10 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{self, AstWalkError, AstWalker, Expr, Stmt},
     env::{Env, Scope},
-    lex::{
-        val::{self, ObjectVal},
-        Token, TokenType,
-    },
+    value::{Token, TokenType, Value},
 };
 use anyhow::*;
 
@@ -41,7 +38,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn eval(&mut self, expr: &ast::Expr) -> anyhow::Result<ObjectVal> {
+    pub fn eval(&mut self, expr: &ast::Expr) -> anyhow::Result<Value> {
         expr.walk(self)
     }
 }
@@ -61,7 +58,7 @@ impl AstWalker<Stmt, ()> for Interpreter {
                 let value = if let Some(init) = initializer {
                     self.eval(init)?
                 } else {
-                    ObjectVal::Unit
+                    Value::Unit
                 };
                 self.env.define(&name.lexeme, &value);
             }
@@ -70,8 +67,8 @@ impl AstWalker<Stmt, ()> for Interpreter {
     }
 }
 
-impl AstWalker<Expr, val::ObjectVal> for Interpreter {
-    fn visit(&mut self, expr: &ast::Expr) -> anyhow::Result<val::ObjectVal> {
+impl AstWalker<Expr, Value> for Interpreter {
+    fn visit(&mut self, expr: &ast::Expr) -> anyhow::Result<Value> {
         match expr {
             ast::Expr::Binary {
                 left,
@@ -89,8 +86,8 @@ impl AstWalker<Expr, val::ObjectVal> for Interpreter {
                     TokenType::Le => eval_le(&lvalue, operator, &rvalue),
                     TokenType::Gt => eval_gt(&lvalue, operator, &rvalue),
                     TokenType::Ge => eval_ge(&lvalue, operator, &rvalue),
-                    TokenType::EqualEqual => Ok(ObjectVal::Boolean(lvalue == rvalue)),
-                    TokenType::BangEqual => Ok(ObjectVal::Boolean(lvalue != rvalue)),
+                    TokenType::EqualEqual => Ok(Value::Boolean(lvalue == rvalue)),
+                    TokenType::BangEqual => Ok(Value::Boolean(lvalue != rvalue)),
                     _ => bail!(
                         "{}",
                         AstWalkError::RuntimeError {
@@ -129,21 +126,17 @@ impl AstWalker<Expr, val::ObjectVal> for Interpreter {
 
 // TODO :: Refactor these eval_* functions into a single macro that can print out this code, or at
 // least define the eval_* functions with highly similar function bodies
-pub fn eval_minus(minus_op: &Token, value: &ObjectVal) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_minus(minus_op: &Token, value: &Value) -> anyhow::Result<Value> {
     let num = value.as_number().map_err(|e| AstWalkError::RuntimeError {
         token: minus_op.clone(),
         message: format!("Operator must be a number, {}", e),
     })?;
-    Ok(ObjectVal::Number(-num))
+    Ok(Value::Number(-num))
 }
 
-pub fn eval_le(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_le(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -153,7 +146,7 @@ pub fn eval_le(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Boolean(ln < &rn))
+            Ok(Value::Boolean(ln < &rn))
         }
         _ => bail!(
             "{}",
@@ -168,13 +161,9 @@ pub fn eval_le(
     }
 }
 
-pub fn eval_lt(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_lt(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -184,7 +173,7 @@ pub fn eval_lt(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Boolean(ln > &rn))
+            Ok(Value::Boolean(ln > &rn))
         }
         _ => bail!(
             "{}",
@@ -199,13 +188,9 @@ pub fn eval_lt(
     }
 }
 
-pub fn eval_ge(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_ge(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -215,7 +200,7 @@ pub fn eval_ge(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Boolean(ln >= &rn))
+            Ok(Value::Boolean(ln >= &rn))
         }
         _ => bail!(
             "{}",
@@ -230,13 +215,9 @@ pub fn eval_ge(
     }
 }
 
-pub fn eval_gt(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_gt(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -246,7 +227,7 @@ pub fn eval_gt(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Boolean(ln > &rn))
+            Ok(Value::Boolean(ln > &rn))
         }
         _ => bail!(
             "{}",
@@ -261,13 +242,9 @@ pub fn eval_gt(
     }
 }
 
-pub fn eval_mul(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_mul(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -277,7 +254,7 @@ pub fn eval_mul(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Number(ln * rn))
+            Ok(Value::Number(ln * rn))
         }
         _ => bail!(
             "{}",
@@ -292,13 +269,9 @@ pub fn eval_mul(
     }
 }
 
-pub fn eval_div(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_div(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -308,7 +281,7 @@ pub fn eval_div(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Number(ln / rn))
+            Ok(Value::Number(ln / rn))
         }
         _ => bail!(
             "{}",
@@ -323,13 +296,9 @@ pub fn eval_div(
     }
 }
 
-pub fn eval_sub(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_sub(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -339,7 +308,7 @@ pub fn eval_sub(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Number(ln - rn))
+            Ok(Value::Number(ln - rn))
         }
         _ => bail!(
             "{}",
@@ -354,13 +323,9 @@ pub fn eval_sub(
     }
 }
 
-pub fn eval_plus(
-    left: &ObjectVal,
-    operator: &Token,
-    right: &ObjectVal,
-) -> anyhow::Result<val::ObjectVal> {
+pub fn eval_plus(left: &Value, operator: &Token, right: &Value) -> anyhow::Result<Value> {
     match left {
-        ObjectVal::Number(ln) => {
+        Value::Number(ln) => {
             let rn = right.as_number().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -370,9 +335,9 @@ pub fn eval_plus(
                     e
                 ),
             })?;
-            Ok(ObjectVal::Number(ln + rn))
+            Ok(Value::Number(ln + rn))
         }
-        ObjectVal::String(ls) => {
+        Value::String(ls) => {
             let rs = right.as_string().map_err(|e| AstWalkError::RuntimeError {
                 token: operator.clone(),
                 message: format!(
@@ -382,7 +347,7 @@ pub fn eval_plus(
                     e
                 ),
             })?;
-            Ok(ObjectVal::String(ls.clone() + &rs))
+            Ok(Value::String(ls.clone() + &rs))
         }
         _ => todo!(),
     }

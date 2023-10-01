@@ -1,10 +1,8 @@
-use crate::lex::{val::ObjectVal, Token};
+use crate::value::{Token, Value};
 
 use thiserror::Error;
 
 use std::rc::Rc;
-
-use crate::lex::val;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -14,7 +12,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Grouping(Box<Expr>),
-    Literal(val::ObjectVal),
+    Literal(Value),
     Unary {
         operator: Token,
         right: Box<Expr>,
@@ -65,7 +63,7 @@ pub enum AstWalkError {
     #[error("Runtime Error :: {token} => {message}")]
     RuntimeError { token: Token, message: String },
     #[error("Type Error :: {value} => {message}")]
-    TypeError { value: ObjectVal, message: String },
+    TypeError { value: Value, message: String },
     #[error("Parse Error :: {token} - {message}")]
     ParseError { token: Token, message: String },
 }
@@ -95,7 +93,7 @@ impl AstWalker<Expr, String> for AstStringify {
             } => self.lispify(&operator.lexeme, &[left.as_ref(), right.as_ref()]),
             Expr::Grouping(exp) => self.lispify("group", &[&exp.as_ref()]),
             Expr::Literal(lit) => match lit {
-                crate::lex::val::ObjectVal::Unit => Ok("nil".into()),
+                Value::Unit => Ok("nil".into()),
 
                 _ => Ok(lit.to_string()),
             },
