@@ -1,25 +1,35 @@
 mod ast;
+
+mod compiler;
 mod env;
 mod interp;
 mod lex;
 mod parse;
 mod sys;
+mod value;
+mod vm;
+
+use std::io::Write;
 
 use ast::Expr;
 use clap::{arg, command, Command};
 
 use interp::Interpreter;
-use lex::{LexResult, Lexer, TokenType};
+use lex::{LexResult, Lexer};
+use log::debug;
 use parse::Parser;
+use vm::VM;
 
-use crate::{ast::AstStringify, lex::val::ObjectVal};
+use crate::{
+    ast::AstStringify,
+    value::{Token, TokenType, Value},
+};
 
 fn main() -> anyhow::Result<()> {
     let args = Command::new("corrosion")
         .about("Corrosion Programming Language Interpreter and Compiler")
         .version("0.0.1")
         // .subcommand_required(true)
-        .arg_required_else_help(true)
         .arg(arg!([filepath] "path to script to run").required(false))
         .get_matches();
 
@@ -41,17 +51,14 @@ fn main() -> anyhow::Result<()> {
 
 // TODO(FIXME) :: Fix repl
 fn run_repl() -> anyhow::Result<()> {
-    let mut interp = Interpreter::new();
+    let mut vm = VM::new();
+    let mut buffer = String::new();
     loop {
-        let mut buffer = String::new();
         print!("> ");
+        std::io::stdout().flush()?;
         std::io::stdin().read_line(&mut buffer)?;
-        let result = Lexer::scan_tokens(&buffer);
-
-        let stmts = Parser::parse(result.tokens.as_ref())?;
-        if let Some(s) = stmts.first() {
-            interp.execute(s)?;
-        }
+        vm.interpret_source(&buffer.trim())?;
+        buffer.clear();
     }
 }
 
@@ -59,21 +66,21 @@ fn run_repl() -> anyhow::Result<()> {
 fn print_expr() -> anyhow::Result<()> {
     let e = Box::new(Expr::Binary {
         left: Box::new(Expr::Unary {
-            operator: lex::Token {
+            operator: Token {
                 ty: TokenType::Minus,
-                literal: ObjectVal::Unit,
+                literal: Value::Unit,
                 line: 1,
                 lexeme: "-".into(),
             },
-            right: Box::new(Expr::Literal(ObjectVal::Number(123.0))),
+            right: Box::new(Expr::Literal(Value::Number(123.0))),
         }),
-        operator: lex::Token {
+        operator: Token {
             ty: TokenType::Star,
-            literal: ObjectVal::Unit,
+            literal: Value::Unit,
             line: 1,
             lexeme: "*".into(),
         },
-        right: Box::new(Expr::Grouping(Box::new(Expr::Literal(ObjectVal::Number(
+        right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Value::Number(
             45.67,
         ))))),
     });

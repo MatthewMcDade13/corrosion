@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::AstWalkError,
-    lex::{val::ObjectVal, Token},
+    value::{Token, Value},
 };
 use anyhow::*;
 use log::trace;
@@ -15,7 +15,7 @@ pub type EnvRef = Rc<RefCell<Env>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct Scope {
-    values: HashMap<String, ObjectVal>,
+    values: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,13 +62,13 @@ impl Env {
     }
 
     /// Defines variable at bottom level (inner-most) scope
-    pub fn define(&mut self, name: &str, value: &ObjectVal) {
+    pub fn define(&mut self, name: &str, value: &Value) {
         self.bottom_mut()
             .values
             .insert(name.to_owned(), value.to_owned());
     }
 
-    pub fn assign(&mut self, name: &Token, value: &ObjectVal) -> anyhow::Result<()> {
+    pub fn assign(&mut self, name: &Token, value: &Value) -> anyhow::Result<()> {
         if let Some(scope) = self.find_scope_mut(name) {
             scope.values.insert(name.lexeme.clone(), value.clone());
             Ok(())
@@ -83,7 +83,7 @@ impl Env {
         }
     }
 
-    pub fn get(&self, name: &Token) -> anyhow::Result<ObjectVal> {
+    pub fn get(&self, name: &Token) -> anyhow::Result<Value> {
         if let Some(scope) = self.find_scope(name) {
             Ok(scope.values[&name.lexeme].clone())
         } else {

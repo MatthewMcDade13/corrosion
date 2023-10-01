@@ -1,6 +1,7 @@
 use crate::{
     ast::{AstWalkError, AstWalker, Expr, Stmt},
-    lex::{val::ObjectVal, Cursor, Token, TokenType},
+    lex::Cursor,
+    value::{Token, TokenType, Value},
 };
 use anyhow::*;
 
@@ -284,15 +285,15 @@ impl Parser {
         match self.peek().ty {
             TokenType::False => {
                 self.advance(1);
-                Ok(Expr::Literal(ObjectVal::Boolean(false)))
+                Ok(Expr::Literal(Value::Boolean(false)))
             }
             TokenType::True => {
                 self.advance(1);
-                Ok(Expr::Literal(ObjectVal::Boolean(true)))
+                Ok(Expr::Literal(Value::Boolean(true)))
             }
             TokenType::Unit => {
                 self.advance(1);
-                Ok(Expr::Literal(ObjectVal::Unit))
+                Ok(Expr::Literal(Value::Unit))
             }
             TokenType::Number | TokenType::String => {
                 self.advance(1);
