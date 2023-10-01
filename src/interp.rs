@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{self, AstWalkError, AstWalker, Expr, Stmt},
     env::{Env, Scope},
-    value::{Token, TokenType, Value},
+    value::{Object, Token, TokenType, Value},
 };
 use anyhow::*;
 
@@ -337,18 +337,21 @@ pub fn eval_plus(left: &Value, operator: &Token, right: &Value) -> anyhow::Resul
             })?;
             Ok(Value::Number(ln + rn))
         }
-        Value::String(ls) => {
-            let rs = right.as_string().map_err(|e| AstWalkError::RuntimeError {
-                token: operator.clone(),
-                message: format!(
-                    "mismatched addition operator: '{} + {}', {}",
-                    left.type_string(),
-                    right.type_string(),
-                    e
-                ),
-            })?;
-            Ok(Value::String(ls.clone() + &rs))
-        }
+        Value::Obj(obj) => match obj {
+            Object::String(ls) => {
+                let rs = right.as_string().map_err(|e| AstWalkError::RuntimeError {
+                    token: operator.clone(),
+                    message: format!(
+                        "mismatched addition operator: '{} + {}', {}",
+                        left.type_string(),
+                        right.type_string(),
+                        e
+                    ),
+                })?;
+                Ok(Value::Obj(Object::String(ls.clone() + &rs)))
+            }
+        },
+
         _ => todo!(),
     }
 }

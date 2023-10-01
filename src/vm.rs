@@ -4,7 +4,7 @@ use log::debug;
 use crate::{
     ast::AstWalkError,
     compiler::{compile_source, Chunk},
-    value::Value,
+    value::{Object, Value},
 };
 
 macro_rules! binary_op {
@@ -91,7 +91,29 @@ impl VM {
                     }
                 }
                 OpcodeType::Add => {
-                    binary_op!(self, +, Value::Number);
+                    let b = self.pop()?;
+                    let a = self.pop()?;
+                    match a {
+                        Value::Number(ln) => {
+                            if let Value::Number(rn) = b {
+                                self.push(Value::Number(ln + rn));
+                            } else {
+                                bail!("Addition operands must be 2 numbers or 2 strings.");
+                            }
+                        }
+                        Value::Obj(lobj) => match lobj {
+                            Object::String(lstr) => {
+                                if let Value::Obj(Object::String(rstr)) = b {
+                                    self.push(Value::Obj(Object::String(lstr + &rstr)))
+                                } else {
+                                    bail!("Addition operands must be 2 numbers or 2 strings.");
+                                }
+                            }
+                        },
+                        _ => {
+                            bail!("Addition operands must be 2 numbers or 2 strings.");
+                        }
+                    }
                 }
                 OpcodeType::Subtract => {
                     binary_op!(self, -, Value::Number);

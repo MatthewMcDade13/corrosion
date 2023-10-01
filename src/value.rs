@@ -80,15 +80,17 @@ impl std::fmt::Display for Token {
 }
 
 #[derive(Debug, Clone)]
+pub enum Object {
+    String(String),
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Number(f64),
-    String(String),
+    // String(String),
     Boolean(bool),
     Nil,
-    // use an Rc for object so we can keep ObjectVal as small as possible
-    // OR we can have the language ast::Object wrap a Box/Rc, which is probably more
-    // preferrable
-    // Obj(Rc<ast::Object>),
+    Obj(Object),
 }
 
 impl Value {
@@ -97,6 +99,21 @@ impl Value {
             Value::Boolean(false) => true,
             Value::Nil => true,
             _ => false,
+        }
+    }
+
+    pub const fn is_obj(&self) -> bool {
+        match self {
+            Value::Obj(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_obj(&self) -> anyhow::Result<Object> {
+        if let Self::Obj(obj) = self {
+            Ok(obj.clone())
+        } else {
+            bail!("Expected Object, got: {}", self.type_string());
         }
     }
 
@@ -111,22 +128,6 @@ impl Value {
                 AstWalkError::TypeError {
                     value,
                     message: format!("Expected Number, got: {}", type_str)
-                }
-            )
-        }
-    }
-
-    pub fn as_string(&self) -> anyhow::Result<String> {
-        let value = self.clone();
-        if let Self::String(string) = value {
-            Ok(string)
-        } else {
-            let type_str = value.type_string();
-            bail!(
-                "{}",
-                AstWalkError::TypeError {
-                    value,
-                    message: format!("Expected String, got: {}", type_str)
                 }
             )
         }
@@ -148,22 +149,27 @@ impl Value {
         }
     }
 
+    pub fn as_string(&self) -> anyhow::Result<String> {
+        let value = self.clone();
+        if let Self::Obj(Object::String(string)) = value {
+            Ok(string)
+        } else {
+            let type_str = value.type_string();
+            bail!("Expected String, got: {}", type_str);
+        }
+    }
+
     pub fn type_string(&self) -> String {
         match self {
             Value::Number(_) => "Number".into(),
-            Value::String(_) => "String".into(),
             Value::Boolean(_) => "Boolean".into(),
+            Value::Obj(obj) => match obj {
+                Object::String(_) => "String".into(),
+            },
             Value::Nil => "Unit".into(),
         }
     }
 
-    pub const fn is_str(&self) -> bool {
-        if let Self::String(_) = self {
-            true
-        } else {
-            false
-        }
-    }
     pub const fn is_bool(&self) -> bool {
         if let Self::Boolean(_) = self {
             true
@@ -191,13 +197,6 @@ impl PartialEq for Value {
                     false
                 }
             }
-            Value::String(left) => {
-                if let Value::String(right) = other {
-                    left == right
-                } else {
-                    false
-                }
-            }
             Value::Boolean(left) => {
                 if let Value::Boolean(right) = other {
                     left == right
@@ -205,6 +204,15 @@ impl PartialEq for Value {
                     false
                 }
             }
+            Value::Obj(obj) => match obj {
+                Object::String(left) => {
+                    if let Value::Obj(Object::String(right)) = other {
+                        left == right
+                    } else {
+                        false
+                    }
+                }
+            },
             Value::Nil => {
                 if let Value::Nil = other {
                     true
@@ -226,9 +234,11 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Value::Number(n) => n.to_string(),
-            Value::String(s) => s.clone(),
             Value::Boolean(b) => b.to_string(),
-            Value::Nil => String::from("()"),
+            Value::Obj(obj) => match obj {
+                Object::String(string) => string.to_owned(),
+            },
+            Value::Nil => String::from("nil"),
         };
         write!(f, "{}", str)
     }

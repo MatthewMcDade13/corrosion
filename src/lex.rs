@@ -57,7 +57,7 @@ use phf::phf_map;
 
 use crate::{
     sys::{is_alpha, is_alpha_numeric, is_digit},
-    value::{Token, TokenType, Value},
+    value::{Object, Token, TokenType, Value},
 };
 
 pub static KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
@@ -254,7 +254,7 @@ impl Lexer {
             let Cursor { start, i, .. } = self.cursor;
             // snip double quotes on ends of string
             let value = self.source_str[(start + 1)..(i - 1)].to_string();
-            Some(Value::String(value))
+            Some(Value::Obj(Object::String(value)))
         }
     }
 

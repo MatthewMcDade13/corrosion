@@ -24,6 +24,11 @@ impl Parser {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    fn string(&mut self) -> anyhow::Result<()> {
+        self.bytecode.add_constant(self.prev().literal.clone());
+        Ok(())
+    }
+
     // true, false, nil
     fn literal(&mut self) -> anyhow::Result<()> {
         match self.prev().ty {
@@ -249,7 +254,7 @@ fn get_parse_rule(ty: TokenType) -> ParseRule {
         TokenType::Lt => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
         TokenType::Le => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
         TokenType::Ident => ParseRule::none(),
-        TokenType::String => ParseRule::none(),
+        TokenType::String => ParseRule::with_prefix(Parser::string, None),
         TokenType::Number => ParseRule::with_prefix(Parser::number, None),
         TokenType::And => ParseRule::none(),
         TokenType::Struct => ParseRule::none(),
