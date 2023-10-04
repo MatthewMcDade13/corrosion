@@ -16,19 +16,39 @@ struct Parser {
 }
 
 impl Parser {
-
-
-
-
-
-
-
     #[inline]
     fn advance(&mut self, n: usize) {
         self.i += n;
     }
+
+    fn declaration(&mut self) -> anyhow::Result<()> {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> anyhow::Result<()> {
+        match self.current().ty {
+            TokenType::Print => {
+                self.advance(1);
+                self.print_statement()
+            }
+            _ => {
+                bail!(
+                    "Compiler::Parser => Incorrect token identifier for beginning of statement: {:?}",
+                    self.current().ty
+                );
+            }
+        }
+    }
+
     fn expression(&mut self) -> anyhow::Result<()> {
         self.parse_precedence(Precedence::Assignment)
+    }
+
+    fn print_statement(&mut self) -> anyhow::Result<()> {
+        self.expression()?;
+        self.expect(TokenType::Semicolon, "Expected ';' at end of statement")?;
+        self.bytecode.add_opcode(OpcodeType::Print.into());
+        Ok(())
     }
 
     fn string(&mut self) -> anyhow::Result<()> {
@@ -391,7 +411,9 @@ pub fn compile(tokens: &[Token]) -> anyhow::Result<Chunk> {
     };
 
     // p.advance(1);
-    while p.current
+    while p.current().ty != TokenType::Eof {
+        p.declaration()?;
+    }
     // p.expect(
     // TokenType::Eof,
     // &format!("Expected end of file token, got {:?}", p.current().ty),

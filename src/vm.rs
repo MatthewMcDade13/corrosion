@@ -73,7 +73,6 @@ impl VM {
             let op = self.next_op();
             match op.ty() {
                 OpcodeType::Return => {
-                    println!("{}", self.pop()?);
                     return Ok(());
                 }
                 OpcodeType::Constant => {
@@ -145,6 +144,10 @@ impl VM {
                 OpcodeType::LessThan => {
                     binary_op!(self, <, Value::Boolean);
                 }
+                OpcodeType::Print => {
+                    let val = self.pop()?;
+                    println!("{}", val);
+                }
                 OpcodeType::Unknown => {
                     bail!("Unknown opcode encountered: {:X}", op.0)
                 }
@@ -174,6 +177,7 @@ impl Opcode {
             Self(11) => OpcodeType::Equal,
             Self(12) => OpcodeType::GreaterThan,
             Self(13) => OpcodeType::LessThan,
+            Self(14) => OpcodeType::Print,
             _ => OpcodeType::Unknown,
         }
     }
@@ -207,5 +211,6 @@ pub enum OpcodeType {
     Equal,
     GreaterThan,
     LessThan,
+    Print,
     Unknown,
 }
