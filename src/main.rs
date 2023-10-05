@@ -34,11 +34,8 @@ fn main() -> anyhow::Result<()> {
         .get_matches();
 
     if let Some(filepath) = args.get_one::<String>("filepath") {
-        let result = Lexer::scan_tokens_file(filepath)?;
-
-        let stmts = Parser::parse(result.tokens.as_ref())?;
-        let mut interp = Interpreter::new();
-        interp.execute_block(stmts.as_slice())?;
+        let mut vm = VM::new();
+        vm.interpret_script(filepath)?;
     } else {
         run_repl()?;
     };
