@@ -67,6 +67,17 @@ pub struct Token {
     pub lexeme: String,
 }
 
+impl Token {
+    pub const fn empty() -> Self {
+        Self {
+            ty: TokenType::Unknown,
+            literal: Value::Nil,
+            line: 0,
+            lexeme: String::new(),
+        }
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self {

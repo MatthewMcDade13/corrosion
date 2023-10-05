@@ -1,5 +1,7 @@
-let x;
-print x;
+
+
+
+
 let a = "global a";
 let b = "global b";
 let c = "global c";
@@ -11,7 +13,6 @@ let c = "global c";
     print a;
     print b;
     print c;
-    print 58 * 4;
   }
   print a;
   print b;
@@ -20,3 +21,12 @@ let c = "global c";
 print a;
 print b;
 print c;
+
+
+
+
+
+
+
+
+

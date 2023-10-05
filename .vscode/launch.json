@@ -7,20 +7,9 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'corr'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=corrosion"
-                ],
-                "filter": {
-                    "name": "corr",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
+            "name": "Launch",
+            "program": "${workspaceFolder}/target/debug/corrosion",
+            "args": ["./scripts/corrosion/test.cor"],
             "cwd": "${workspaceFolder}"
         },
         {

@@ -5,14 +5,16 @@ use log::debug;
 
 use crate::{
     lex::Lexer,
-    value::{Token, TokenType, Value},
+    value::{Object, Token, TokenType, Value},
     vm::{Opcode, OpcodeType, VM},
 };
 
+#[derive(Debug, Clone)]
 struct Parser {
     tokens: Vec<Token>,
     i: usize,
     bytecode: Chunk,
+    compiler: Compiler,
 }
 
 impl Parser {
@@ -20,17 +22,184 @@ impl Parser {
     fn advance(&mut self, n: usize) {
         self.i += n;
     }
+
+    fn declaration(&mut self) -> anyhow::Result<()> {
+        let result = if let TokenType::Let = self.current().ty {
+            self.advance(1);
+            self.let_declaration()
+        } else {
+            self.statement()
+        };
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                println!("Compiler::Parser => [ERROR]: {}", err);
+                self.synchronize()
+            }
+        }
+    }
+
+    fn let_declaration(&mut self) -> anyhow::Result<()> {
+        let global = self.parse_variable()?;
+
+        if let TokenType::Equal = self.current().ty {
+            self.advance(1);
+            self.expression()?;
+        } else {
+            self.bytecode.add_opcode(OpcodeType::Nil.into());
+        };
+        self.expect(
+            TokenType::Semicolon,
+            "let_declaration :: Expected ';' after let declaration",
+        )?;
+        self.define_variable(global);
+        Ok(())
+    }
+
+    fn statement(&mut self) -> anyhow::Result<()> {
+        match self.current().ty {
+            TokenType::Print => {
+                self.advance(1);
+                self.print_statement()
+            }
+            TokenType::LeftBrace => {
+                self.advance(1);
+                self.begin_scope();
+
+                self.block()?;
+                self.end_scope();
+                Ok(())
+            }
+            _ => self.expression_statement(),
+        }
+    }
+
     fn expression(&mut self) -> anyhow::Result<()> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn string(&mut self) -> anyhow::Result<()> {
+    fn block(&mut self) -> anyhow::Result<()> {
+        while self.current().ty != TokenType::RightBrace && self.current().ty != TokenType::Eof {
+            self.declaration()?;
+        }
+        self.expect(TokenType::RightBrace, "Expected '}' after block statement")
+    }
+
+    fn expression_statement(&mut self) -> anyhow::Result<()> {
+        self.expression()?;
+        self.expect(
+            TokenType::Semicolon,
+            "expression_statement :: Expected ';' at end of statement",
+        )?;
+        self.bytecode.add_opcode(OpcodeType::Pop.into());
+        Ok(())
+    }
+
+    fn print_statement(&mut self) -> anyhow::Result<()> {
+        self.expression()?;
+        self.expect(
+            TokenType::Semicolon,
+            "print_statement :: Expected ';' at end of statement",
+        )?;
+        self.bytecode.add_opcode(OpcodeType::Print.into());
+        Ok(())
+    }
+
+    fn define_variable(&mut self, global_index: usize) {
+        if self.compiler.scope_depth > 0 {
+            // self.compiler.initialize_local(0);
+            return ();
+        }
+        self.bytecode
+            .add_opcodes(OpcodeType::DefineGlobal.into(), global_index.into());
+    }
+
+    fn declare_variable(&mut self) -> anyhow::Result<()> {
+        if self.compiler.scope_depth == 0 {
+            Ok(())
+        } else {
+            let name = self.prev().clone();
+            self.compiler.push_local(name);
+            Ok(())
+        }
+    }
+
+    fn string(&mut self, _: bool) -> anyhow::Result<()> {
         self.bytecode.add_constant(self.prev().literal.clone());
         Ok(())
     }
 
+    fn parse_variable(&mut self) -> anyhow::Result<usize> {
+        self.expect(TokenType::Ident, "Expected name for let declaration")?;
+
+        self.declare_variable()?;
+        if self.compiler.scope_depth > 0 {
+            return Ok(0);
+        }
+        let prev_tok = self.prev().clone();
+        let name_index = self.bytecode.add_constant_ident(&prev_tok);
+        Ok(name_index)
+    }
+
+    fn synchronize(&mut self) -> anyhow::Result<()> {
+        while self.current().ty != TokenType::Eof {
+            if let TokenType::Semicolon = self.prev().ty {
+                return Ok(());
+            } else {
+                match self.current().ty {
+                    TokenType::Struct
+                    | TokenType::Fn
+                    | TokenType::Let
+                    | TokenType::For
+                    | TokenType::If
+                    | TokenType::While
+                    | TokenType::Print
+                    | TokenType::Return => return Ok(()),
+                    _ => self.advance(1),
+                };
+            };
+        }
+        Ok(())
+    }
+
+    fn variable(&mut self, can_assign: bool) -> anyhow::Result<()> {
+        self.named_variable(&self.prev().clone(), can_assign)
+    }
+
+    fn named_variable(&mut self, name: &Token, can_assign: bool) -> anyhow::Result<()> {
+        // let arg = self.bytecode.add_constant_ident(token);
+        let (get, set, arg) = {
+            if let Some(i) = self.compiler.resolve_local(name) {
+                (
+                    Opcode::from(OpcodeType::GetLocal),
+                    Opcode::from(OpcodeType::SetLocal),
+                    i,
+                )
+            } else {
+                (
+                    Opcode::from(OpcodeType::GetGlobal),
+                    Opcode::from(OpcodeType::SetGlobal),
+                    self.bytecode.add_constant_ident(name),
+                )
+                // (Opcode::from(OpcodeType::GetGlobal, Opcode::from(OpcodeType::SetGlobal))
+            }
+        };
+        // println!("named_variable => locals: {:?}", self.compiler.locals);
+        // println!("named_variable => get: {}, set: {}, arg: {}", get, set, arg);
+        if can_assign && self.current().ty == TokenType::Equal {
+            self.advance(1);
+            self.expression()?;
+            self.bytecode.add_opcodes(set, arg.into());
+        } else {
+            self.bytecode.add_opcodes(get, arg.into());
+        };
+
+        Ok(())
+    }
+
     // true, false, nil
-    fn literal(&mut self) -> anyhow::Result<()> {
+    fn literal(&mut self, _: bool) -> anyhow::Result<()> {
         match self.prev().ty {
             TokenType::Nil => self.bytecode.add_opcode(OpcodeType::Nil.into()),
             TokenType::False => self.bytecode.add_opcode(OpcodeType::False.into()),
@@ -43,7 +212,7 @@ impl Parser {
         Ok(())
     }
 
-    fn number(&mut self) -> anyhow::Result<()> {
+    fn number(&mut self, _: bool) -> anyhow::Result<()> {
         // TODO :: Typecheck this!!!
         if self.prev().ty == TokenType::Number {
             self.bytecode.add_constant(self.prev().literal.clone());
@@ -53,12 +222,12 @@ impl Parser {
         }
     }
 
-    fn grouping(&mut self) -> anyhow::Result<()> {
+    fn grouping(&mut self, _: bool) -> anyhow::Result<()> {
         self.expression()?;
         self.expect(TokenType::RightParen, "Expected ')' at end of grouping")
     }
 
-    fn unary(&mut self) -> anyhow::Result<()> {
+    fn unary(&mut self, _: bool) -> anyhow::Result<()> {
         let op_type = self.prev().ty;
 
         self.expression()?;
@@ -71,7 +240,7 @@ impl Parser {
         Ok(())
     }
 
-    fn binary(&mut self) -> anyhow::Result<()> {
+    fn binary(&mut self, _: bool) -> anyhow::Result<()> {
         let op_type = self.prev().ty;
         let rule = get_parse_rule(op_type);
 
@@ -103,22 +272,47 @@ impl Parser {
             self.advance(1);
             Ok(())
         } else {
-            bail!(message.to_string());
+            bail!(
+                "Compiler::Parser => {}; got: {}",
+                message.to_string(),
+                self.current()
+            );
         }
     }
 
+    #[inline]
     fn current(&self) -> &Token {
         &self.tokens[self.i]
     }
 
+    #[inline]
     fn prev(&self) -> &Token {
         &self.tokens[self.i - 1]
     }
 
+    fn begin_scope(&mut self) {
+        self.compiler.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.compiler.scope_depth -= 1;
+        while self.compiler.locals.len() > 0 {
+            let back = self.compiler.locals_top();
+
+            if back.depth > self.compiler.scope_depth {
+                let _ = self.compiler.pop_local();
+                self.bytecode.add_opcode(OpcodeType::Pop.into());
+            } else {
+                break;
+            }
+        }
+    }
+
     fn parse_precedence(&mut self, precedence: Precedence) -> anyhow::Result<()> {
         self.advance(1);
+        let can_assign = precedence <= Precedence::Assignment;
         if let Some(prefix) = get_parse_rule(self.prev().ty).prefix {
-            prefix(self)?;
+            prefix(self, can_assign)?;
         } // else {
           //             // bail!("Expected expression");
           // }
@@ -126,7 +320,7 @@ impl Parser {
         while precedence <= get_parse_rule(self.current().ty).precedence {
             self.advance(1);
             if let Some(infix) = get_parse_rule(self.prev().ty).infix {
-                infix(self)?;
+                infix(self, can_assign)?;
             }
         }
         Ok(())
@@ -168,7 +362,7 @@ impl Precedence {
     }
 }
 
-type ParseFn = fn(&mut Parser) -> anyhow::Result<()>;
+type ParseFn = fn(&mut Parser, bool) -> anyhow::Result<()>;
 
 #[derive(Debug, Clone)]
 struct ParseRule {
@@ -253,7 +447,7 @@ fn get_parse_rule(ty: TokenType) -> ParseRule {
         TokenType::Ge => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
         TokenType::Lt => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
         TokenType::Le => ParseRule::with_infix(Parser::binary, Some(Precedence::Comparison)),
-        TokenType::Ident => ParseRule::none(),
+        TokenType::Ident => ParseRule::with_prefix(Parser::variable, None),
         TokenType::String => ParseRule::with_prefix(Parser::string, None),
         TokenType::Number => ParseRule::with_prefix(Parser::number, None),
         TokenType::And => ParseRule::none(),
@@ -328,11 +522,17 @@ impl Chunk {
         self.instructions.push(b);
     }
 
-    pub fn add_constant(&mut self, v: Value) {
-        self.constants.push(v);
-        let cindex = self.constants.len() - 1;
+    pub fn add_constant(&mut self, v: Value) -> usize {
+        let cindex = self.push_constant(v);
         self.add_opcode(Opcode(OpcodeType::Constant as usize));
         self.add_opcode(Opcode(cindex));
+        cindex
+    }
+
+    pub fn add_constant_ident(&mut self, token: &Token) -> usize {
+        // self.add_constant(Value::Obj(Object::String(token.lexeme.clone())))
+        let ident = Value::Obj(Object::String(token.lexeme.clone()));
+        self.push_constant(ident)
     }
 
     pub fn print_instructions(&self) -> String {
@@ -359,36 +559,94 @@ impl Chunk {
                 OpcodeType::Negate => {
                     println!("Opcode::Negate");
                 }
-                _ => {
-                    println!("Unknown opcode :: {}", op.0);
-                }
+                OpcodeType::Unknown => {}
+                _ => {}
             }
         }
     }
-}
 
-pub fn compile_source(source: &str) -> anyhow::Result<Chunk> {
-    let result = Lexer::scan_tokens(source);
-    if result.errors.len() == 0 {
-        compile(&result.tokens)
-    } else {
-        bail!("LEX ERROR(S): {:?}", result.errors)
+    fn push_constant(&mut self, v: Value) -> usize {
+        self.constants.push(v);
+        self.constants.len() - 1
     }
 }
 
-pub fn compile(tokens: &[Token]) -> anyhow::Result<Chunk> {
-    let mut p = Parser {
-        tokens: tokens.to_vec(),
-        i: 0,
-        bytecode: Chunk::new(),
-    };
+#[derive(Debug, Clone)]
+struct Local {
+    name: Token,
+    depth: usize,
+}
 
-    // p.advance(1);
-    p.expression()?;
-    // p.expect(
-    // TokenType::Eof,
-    // &format!("Expected end of file token, got {:?}", p.current().ty),
-    // )?;
-    p.bytecode.add_opcode(OpcodeType::Return.into());
-    Ok(p.bytecode)
+#[derive(Debug, Clone)]
+pub struct Compiler {
+    locals: Vec<Local>,
+    scope_depth: usize,
+}
+
+impl Compiler {
+    fn new() -> Self {
+        Self {
+            locals: Vec::with_capacity(256),
+            scope_depth: 0,
+        }
+    }
+
+    fn resolve_local(&self, name: &Token) -> Option<usize> {
+        let mut i = self.locals.len() as isize - 1;
+        while i >= 0 {
+            let l = &self.locals[i as usize];
+
+            if name.lexeme == l.name.lexeme {
+                return Some(i as usize);
+            }
+            i -= 1;
+        }
+        None
+    }
+
+    fn push_local(&mut self, token: Token) {
+        self.locals.push(Local {
+            name: token,
+            depth: self.scope_depth,
+        });
+    }
+
+    fn locals_top(&self) -> &Local {
+        self.locals
+            .last()
+            .expect("Cannot get top of Compiler::locals; array empty.")
+    }
+
+    fn pop_local(&mut self) -> Option<Local> {
+        self.locals.pop()
+    }
+
+    pub fn compile_source(source: &str) -> anyhow::Result<Chunk> {
+        let result = Lexer::scan_tokens(source.trim());
+        if result.errors.len() == 0 {
+            Self::compile(&result.tokens)
+        } else {
+            bail!("LEX ERROR(S): {:?}", result.errors)
+        }
+    }
+
+    pub fn compile(tokens: &[Token]) -> anyhow::Result<Chunk> {
+        let mut p = Parser {
+            tokens: tokens.to_vec(),
+            i: 0,
+            bytecode: Chunk::new(),
+            compiler: Compiler::new(),
+        };
+
+        // p.advance(1);
+        while p.current().ty != TokenType::Eof {
+            p.declaration()?;
+        }
+        // p.expect(
+        // TokenType::Eof,
+        // &format!("Expected end of file token, got {:?}", p.current().ty),
+        // )?;
+        p.bytecode.add_opcode(OpcodeType::Return.into());
+        Ok(p.bytecode)
+    }
 }

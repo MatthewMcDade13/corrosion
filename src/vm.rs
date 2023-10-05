@@ -1,9 +1,11 @@
+use std::{collections::HashMap, fs::File};
+
 use anyhow::bail;
 use log::debug;
 
 use crate::{
     ast::AstWalkError,
-    compiler::{compile_source, Chunk},
+    compiler::{Chunk, Compiler},
     value::{Object, Value},
 };
 
@@ -19,6 +21,7 @@ pub struct VM {
     pc: usize,
     chunk: Chunk,
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
 }
 
 impl VM {
@@ -28,6 +31,7 @@ impl VM {
             pc: 0,
             chunk: Chunk::new(),
             stack: Vec::with_capacity(Self::STACK_SIZE),
+            globals: HashMap::new(),
         }
     }
 
@@ -37,8 +41,20 @@ impl VM {
         self.stack.clear();
     }
 
-    pub fn stack_top(&self) -> Option<&Value> {
-        self.stack.last()
+    pub fn peek_stack(&self, offset: usize) -> Option<&Value> {
+        let iback = self.stack.len() - 1;
+        self.stack.get(iback - offset)
+    }
+
+    pub fn peek_stack_mut(&mut self, offset: usize) -> Option<&mut Value> {
+        let iback = self.stack.len() - 1;
+        self.stack.get_mut(iback - offset)
+    }
+
+    pub fn stack_top(&self) -> &Value {
+        self.stack
+            .last()
+            .expect("Unable to get value at top of stack; stack is empty.")
     }
 
     pub fn push(&mut self, value: Value) {
@@ -52,8 +68,9 @@ impl VM {
         }
     }
 
-    pub fn interpret(&mut self, ops: &[Opcode]) -> anyhow::Result<()> {
-        todo!()
+    pub fn interpret_script(&mut self, script_path: &str) -> anyhow::Result<()> {
+        let source = std::fs::read_to_string(script_path)?;
+        self.interpret_source(&source)
     }
 
     pub fn next_op(&mut self) -> Opcode {
@@ -63,7 +80,7 @@ impl VM {
     }
 
     pub fn interpret_source(&mut self, source: &str) -> anyhow::Result<()> {
-        let chunk = compile_source(source)?;
+        let chunk = Compiler::compile_source(source)?;
         self.reset(chunk);
         self.run()
     }
@@ -73,7 +90,6 @@ impl VM {
             let op = self.next_op();
             match op.ty() {
                 OpcodeType::Return => {
-                    println!("{}", self.pop()?);
                     return Ok(());
                 }
                 OpcodeType::Constant => {
@@ -145,6 +161,55 @@ impl VM {
                 OpcodeType::LessThan => {
                     binary_op!(self, <, Value::Boolean);
                 }
+                OpcodeType::Print => {
+                    let val = self.pop()?;
+                    println!("{}", val);
+                }
+                OpcodeType::Pop => {
+                    let _ = self.pop()?;
+                }
+                OpcodeType::DefineGlobal => {
+                    let global_index = self.next_op();
+                    let name = self.chunk.constant_at(global_index.0).as_string()?;
+                    let value = self.pop()?;
+                    self.globals.insert(name, value);
+                }
+                OpcodeType::GetGlobal => {
+                    let global_index = self.next_op();
+                    let name = self.chunk.constant_at(global_index.0).as_string()?;
+                    if let Some(val) = self.globals.get(&name) {
+                        self.push(val.clone());
+                    } else {
+                        bail!(
+                            "Compiler::Parser => Unable to get Undefined let binding: {}",
+                            name
+                        );
+                    }
+                }
+                OpcodeType::SetGlobal => {
+                    let gindex = self.next_op();
+                    let name = self.chunk.constant_at(gindex.0).as_string()?;
+                    if self.globals.contains_key(&name) {
+                        let value = self
+                            .peek_stack(0)
+                            .expect("Stack peek failed, Stack is empty")
+                            .clone();
+                        self.globals.insert(name, value);
+                    } else {
+                        bail!(
+                            "Compiler::Parser => Unable to assign to Undefined let binding: {}",
+                            name
+                        );
+                    }
+                }
+                OpcodeType::GetLocal => {
+                    let slot = self.next_op().0;
+                    self.push(self.stack[slot].clone());
+                }
+                OpcodeType::SetLocal => {
+                    let slot = self.next_op().0;
+                    self.stack[slot] = self.stack_top().clone();
+                }
                 OpcodeType::Unknown => {
                     bail!("Unknown opcode encountered: {:X}", op.0)
                 }
@@ -174,6 +239,13 @@ impl Opcode {
             Self(11) => OpcodeType::Equal,
             Self(12) => OpcodeType::GreaterThan,
             Self(13) => OpcodeType::LessThan,
+            Self(14) => OpcodeType::Print,
+            Self(15) => OpcodeType::Pop,
+            Self(16) => OpcodeType::DefineGlobal,
+            Self(17) => OpcodeType::GetGlobal,
+            Self(18) => OpcodeType::SetGlobal,
+            Self(19) => OpcodeType::GetLocal,
+            Self(20) => OpcodeType::SetLocal,
             _ => OpcodeType::Unknown,
         }
     }
@@ -182,6 +254,12 @@ impl Opcode {
 impl From<OpcodeType> for Opcode {
     fn from(value: OpcodeType) -> Self {
         Opcode(value as usize)
+    }
+}
+
+impl From<usize> for Opcode {
+    fn from(value: usize) -> Self {
+        Opcode(value)
     }
 }
 
@@ -207,5 +285,12 @@ pub enum OpcodeType {
     Equal,
     GreaterThan,
     LessThan,
+    Print,
+    Pop,
+    DefineGlobal,
+    GetGlobal,
+    SetGlobal,
+    GetLocal,
+    SetLocal,
     Unknown,
 }
